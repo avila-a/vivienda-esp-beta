@@ -1,0 +1,46 @@
+LICENCIA
+
+Titular: Antonio Avila-Uribe
+
+Este repositorio y la página que publica tienen tres partes, con licencias distintas.
+
+
+1. Código de la página (index.html, app.js, csv.js, estilo.css y .github/)
+
+   Copyright (c) 2026 Antonio Avila-Uribe. Todos los derechos reservados.
+
+   Se puede ver y ejecutar en el navegador al visitar la página. No se concede ningún permiso para
+   copiarlo, modificarlo, redistribuirlo ni usarlo en otros sitios. Las condiciones de GitHub permiten
+   ver el repositorio y hacer copias (forks) dentro de GitHub; eso no da ningún otro permiso.
+
+
+2. Datos, textos y gráficos de la página y de sus descargas (la carpeta datos/, que se publica desde
+   las Releases de este repositorio)
+
+   Copyright (c) 2026 Antonio Avila Uribe. Licencia Creative Commons Reconocimiento-NoComercial-SinObraDerivada
+   4.0 Internacional (CC BY-NC-ND 4.0):
+   https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode.es
+
+   Se pueden copiar y compartir tal cual, citando esta página y las fuentes originales, sin fines comerciales y sin modificarlos.
+
+   Esta licencia cubre solo lo elaborado aquí: la selección, los cálculos, los textos y la presentación.
+   Los datos originales siguen con la licencia de cada fuente, que esta licencia no limita:
+
+   - INE: CC BY 4.0. Elaboración propia con datos extraídos del sitio web del INE: www.ine.es
+     (https://www.ine.es/aviso_legal).
+   - Eurostat: reutilización autorizada citando la fuente (Decisión 2011/833/UE).
+   - Ministerio de Vivienda y Agenda Urbana: reutilización de la información del sector público (Ley
+     37/2007), citando la fuente.
+   - Dirección General del Catastro: licencia de acceso y uso de sus datos INSPIRE (2016). Las cifras
+     que salen del Catastro están transformadas y no son información catastral.
+   - elDiario.es, recuento de anuncios de idealista: CC BY-NC 4.0. Se enseñan en la página con su cita.
+
+   Ninguna de esas fuentes participa en esta página ni la respalda, y no son responsables del
+   tratamiento de sus datos.
+
+
+3. Partes de terceros, con su propia licencia
+
+   - lib/ (Leaflet): licencia BSD de dos cláusulas, en lib/LICENSE_leaflet.txt.
+   - Fondo del mapa: © colaboradores de OpenStreetMap, ODbL (https://www.openstreetmap.org/copyright).
+     No está en este repositorio: lo sirve OpenStreetMap.

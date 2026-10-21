@@ -1,0 +1,245 @@
+/* Prueba del dashboard: estilo. Pensado primero para el móvil; en pantallas anchas, mapa y ficha en dos columnas. */
+
+:root {
+  --fondo: #ffffff;
+  --fondo-suave: #f4f3ef;
+  --tinta: #22211f;
+  --tinta-suave: #5c5a55;
+  --borde: #d9d7d0;
+  --acento: #eb6834;          /* naranja del proyecto (alquiler de mercado) */
+  --aviso: #8a3b00;
+  --aviso-fondo: #fff1e0;
+  --aviso-borde: #f0b072;
+  --cabecera: 56px;
+  --pestanas: 44px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--fondo);
+  color: var(--tinta);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+a { color: #1d5fad; }
+.oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* Cabecera y buscador */
+.cabecera {
+  position: sticky; top: 0; z-index: 1000;
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 16px; min-height: var(--cabecera);
+  background: var(--fondo); border-bottom: 1px solid var(--borde);
+}
+.marca { font-weight: 700; color: var(--tinta); text-decoration: none; white-space: nowrap; }
+.buscador { position: relative; flex: 1; max-width: 520px; }
+.buscador input {
+  width: 100%; padding: 8px 12px; font: inherit;
+  border: 1px solid var(--borde); border-radius: 8px; background: var(--fondo-suave);
+}
+.buscador ul {
+  position: absolute; left: 0; right: 0; top: 100%; margin: 4px 0 0; padding: 4px 0;
+  list-style: none; background: var(--fondo); border: 1px solid var(--borde); border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.12); max-height: 60vh; overflow-y: auto;
+}
+.buscador li { padding: 8px 12px; cursor: pointer; }
+.buscador li[aria-selected="true"], .buscador li:hover { background: var(--fondo-suave); }
+.buscador li.vacio { color: var(--tinta-suave); cursor: default; }
+.enlace-fuentes { white-space: nowrap; }
+.aviso-prueba { margin: 0; padding: 6px 16px; font-size: 14px; background: var(--fondo-suave); color: var(--tinta-suave); }
+
+/* Mapa */
+.zona-mapa { padding: 0 16px; }
+.controles-mapa { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 8px 0; }
+.selector { display: flex; gap: 8px; align-items: center; font-size: 14px; flex-wrap: wrap; }
+.selector select { font: inherit; padding: 4px 8px; max-width: 100%; min-width: 0; }
+.controles-mapa > * { min-width: 0; max-width: 100%; }
+html, body { overflow-x: hidden; }
+.zona-ficha, .zona-mapa { min-width: 0; }
+.grafico table { width: 100%; font-size: 13px; border-collapse: collapse; }
+.grafico td, .grafico th { text-align: left; padding: 2px 4px; border-bottom: 1px dotted var(--borde); }
+.capas { display: flex; gap: 4px; }
+.capas button {
+  font: inherit; font-size: 14px; padding: 4px 10px; border: 1px solid var(--borde);
+  background: var(--fondo); border-radius: 6px; cursor: pointer;
+}
+.capas button[aria-pressed="true"] { background: var(--tinta); color: #fff; border-color: var(--tinta); }
+#mapa { height: 45vh; min-height: 280px; border: 1px solid var(--borde); border-radius: 8px; background: #eef1f4; }
+.leyenda { font-size: 13px; padding: 8px 0 16px; color: var(--tinta-suave); }
+.leyenda h3 { font-size: 14px; margin: 0 0 4px; color: var(--tinta); }
+.leyenda ul { list-style: none; padding: 0; margin: 4px 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.leyenda li { display: flex; align-items: center; gap: 6px; }
+.muestra { display: inline-block; width: 16px; height: 12px; border: 1px solid #999; }
+.muestra.discontinua { background: transparent; border: 2px dashed #222; }
+.leyenda p { margin: 2px 0; }
+
+/* Ficha */
+.zona-ficha { padding: 8px 16px 48px; }
+.migas { font-size: 14px; color: var(--tinta-suave); margin: 0 0 4px; }
+.migas a { color: var(--tinta-suave); }
+.zona-ficha h1 { font-size: 24px; line-height: 1.2; margin: 0 0 8px; }
+.entrada p { margin: 0 0 12px; color: var(--tinta-suave); }
+.destacadas { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin: 12px 0 16px; }
+/* Una casilla: una cifra y, debajo, las que van junto a ella (por cada 100 alquiladas) */
+.casilla { background: var(--fondo-suave); border-radius: 8px; }
+.destacada { padding: 10px 12px; }
+.destacada.junto { border-top: 1px dotted var(--borde); padding-top: 8px; }
+.destacada.junto .numero { font-size: 20px; }
+.destacada .numero { font-size: 26px; font-weight: 700; line-height: 1.1; }
+.destacada .etiqueta { font-size: 14px; }
+.destacada .fecha { font-size: 12px; color: var(--tinta-suave); margin-top: 2px; }
+
+.aviso {
+  background: var(--aviso-fondo); border: 1px solid var(--aviso-borde); color: var(--aviso);
+  border-radius: 6px; padding: 6px 8px; font-size: 13px; margin: 6px 0 0;
+}
+.aviso ul { margin: 0; padding-left: 0; list-style: none; }
+.marca-aviso { color: var(--aviso); font-weight: 700; font-size: 13px; white-space: nowrap; }
+.sin-datos { margin: 8px 0; }
+
+.bloque { border-top: 1px solid var(--borde); padding: 4px 0; }
+.bloque > summary { cursor: pointer; padding: 8px 0; font-weight: 600; list-style-position: outside; }
+.bloque > summary .marca-aviso { margin-left: 6px; font-weight: 600; }
+.cifras { margin: 0; }
+.cifra { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 6px 0; border-bottom: 1px dotted var(--borde); }
+.cifra dt { font-size: 14px; }
+.cifra dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.cifra .que-es { grid-column: 1 / -1; font-size: 13px; color: var(--tinta-suave); margin: 0; }
+.boton-que-es {
+  border: 1px solid var(--borde); background: var(--fondo); border-radius: 50%; width: 20px; height: 20px;
+  font-size: 12px; line-height: 1; cursor: pointer; margin-left: 4px; color: var(--tinta-suave); padding: 0;
+}
+.fuente { font-size: 12px; color: var(--tinta-suave); margin: 8px 0; }
+
+.grafico { margin: 8px 0 16px; }
+.grafico h2, .descargas h2 { font-size: 18px; margin: 16px 0 4px; }
+.grafico > svg { width: 100%; height: auto; display: block; }
+.leyenda-meses span { display: inline-flex; align-items: center; gap: 4px; }
+.leyenda-meses svg { width: 14px; height: 14px; }
+.grafico .notas { font-size: 12px; color: var(--tinta-suave); margin: 4px 0 0; padding-left: 16px; }
+.grafico .leyenda-meses { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; margin: 4px 0; }
+
+.descargas { border-top: 1px solid var(--borde); margin-top: 8px; }
+.descargas button, .descargas a.boton {
+  display: inline-block; font: inherit; font-size: 15px; padding: 8px 14px; margin: 4px 8px 4px 0;
+  background: var(--tinta); color: #fff; border: 0; border-radius: 8px; cursor: pointer; text-decoration: none;
+}
+.descargas a.boton.secundario { background: var(--fondo-suave); color: var(--tinta); border: 1px solid var(--borde); }
+.descargas p { font-size: 13px; color: var(--tinta-suave); }
+
+.fuentes-pagina section { border-top: 1px solid var(--borde); padding: 8px 0; }
+.fuentes-pagina h2 { font-size: 18px; margin: 8px 0; }
+.fuentes-pagina li { margin-bottom: 4px; }
+
+.ir-ficha {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 1001;
+  background: var(--tinta); color: #fff; padding: 10px 18px; border-radius: 24px; text-decoration: none;
+  box-shadow: 0 4px 14px rgba(0,0,0,.25); font-size: 15px; max-width: calc(100% - 32px);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cargando, .error { color: var(--tinta-suave); }
+
+/* Pestañas por tema, fijas bajo la cabecera */
+.pestanas {
+  position: sticky; top: var(--cabecera); z-index: 999;
+  display: flex; gap: 4px; padding: 6px 16px 0; overflow-x: auto; scrollbar-width: thin;
+  background: var(--fondo); border-bottom: 1px solid var(--borde); min-height: var(--pestanas);
+}
+.pestanas button {
+  font: inherit; font-size: 15px; white-space: nowrap; cursor: pointer;
+  padding: 8px 14px; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0;
+  background: transparent; color: var(--tinta-suave);
+}
+.pestanas button:hover { color: var(--tinta); background: var(--fondo-suave); }
+.pestanas button[aria-selected="true"] {
+  color: var(--tinta); font-weight: 700; background: var(--fondo);
+  border-color: var(--borde); margin-bottom: -1px; box-shadow: inset 0 3px 0 var(--color, var(--acento));
+}
+
+/* Cabeza de la ficha: título y cifra del mapa */
+.zona-cabeza { padding: 12px 16px 4px; min-width: 0; }
+.zona-cabeza h1 { font-size: 24px; line-height: 1.2; margin: 0 0 8px; }
+.zona-cabeza h1 .codigo { font-size: 0.6em; font-weight: 400; color: var(--tinta-suave); white-space: nowrap; }
+.zona-cabeza .entrada { margin: 0 0 8px; color: var(--tinta-suave); font-size: 15px; }
+.variables { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.variables button {
+  font: inherit; font-size: 14px; padding: 6px 12px; cursor: pointer; text-align: left;
+  border: 1px solid var(--borde); border-radius: 18px; background: var(--fondo); color: var(--tinta);
+}
+.variables button:hover { background: var(--fondo-suave); }
+/* La cifra elegida, con el color de su tema (el de su mapa) y el texto que mejor se lee encima (app.js) */
+.variables button[aria-checked="true"] { background: var(--color, var(--tinta)); color: var(--texto, #fff);
+  border-color: var(--color, var(--tinta)); font-weight: 600; }
+/* Selector de la base de la cifra elegida: debajo de las cifras, más pequeño, con su título delante */
+.bases { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0 4px; padding: 6px 8px;
+  background: var(--fondo-suave); border-radius: 8px; }
+.bases .bases-titulo { font-size: 13px; color: var(--tinta-suave, #5c5a55); margin-right: 4px; }
+.bases button {
+  font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer; text-align: left;
+  border: 1px solid var(--borde); border-radius: 14px; background: var(--fondo); color: var(--tinta);
+}
+.bases button:hover { border-color: var(--tinta); }
+.bases button[aria-checked="true"] { background: var(--fondo); border: 2px solid var(--color, var(--tinta)); font-weight: 600; padding: 3px 9px; }
+
+/* Tarjetas: la cifra elegida, grande; las otras del tema, pequeñas y se pueden elegir */
+.tarjeta { display: flex; flex-direction: column; gap: 2px; text-align: left; font: inherit; color: var(--tinta);
+  background: var(--fondo-suave); border: 1px solid transparent; border-radius: 8px; padding: 10px 12px; }
+.tarjeta .numero { font-size: 22px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tarjeta .etiqueta { font-size: 14px; }
+.tarjeta .fecha { font-size: 12px; color: var(--tinta-suave); }
+.tarjeta.elegida { margin: 4px 0 8px; }
+.tarjeta.elegida .numero { font-size: 32px; }
+.tarjeta.elegida .que-es-tarjeta { font-size: 13px; color: var(--tinta-suave); margin-top: 4px; }
+.tarjeta.elegida .aviso { display: block; }
+button.tarjeta { cursor: pointer; }
+button.tarjeta:hover { border-color: var(--borde); background: var(--fondo); }
+.tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin: 8px 0 16px; }
+.zona-ficha h2.sub { font-size: 16px; margin: 16px 0 4px; }
+.sin-tema, .sin-grafico { color: var(--tinta-suave); }
+/* Títulos de las dos listas de cifras: las del tema y las demás del lugar */
+.zona-ficha h2.lista { font-size: 18px; margin: 24px 0 4px; padding-top: 8px; border-top: 2px solid var(--tinta); }
+
+/* Pantallas anchas: a la izquierda, la cabeza y la ficha; a la derecha, el mapa, fijo */
+@media (min-width: 900px) {
+  .cuerpo { display: grid; grid-template-columns: minmax(380px, 2fr) minmax(0, 3fr); grid-template-rows: auto 1fr; }
+  .zona-cabeza { grid-column: 1; grid-row: 1; border-right: 1px solid var(--borde); }
+  .zona-ficha { grid-column: 1; grid-row: 2; border-right: 1px solid var(--borde); }
+  .zona-mapa { grid-column: 2; grid-row: 1 / span 2; position: sticky; top: calc(var(--cabecera) + var(--pestanas)); align-self: start;
+    height: calc(100vh - var(--cabecera) - var(--pestanas)); display: flex; flex-direction: column; overflow-y: auto; }
+  #mapa { flex: 1; height: auto; min-height: 380px; }
+  .ir-ficha { display: none; }
+}
+@media (max-width: 520px) {
+  .cabecera { flex-wrap: wrap; }
+  .buscador { order: 3; flex-basis: 100%; max-width: none; }
+  .marca { flex: 1; }
+  .pestanas { position: static; }
+}
+
+/* Código del distrito o de la sección, en pequeño junto al título */
+.zona-ficha h1 .codigo { font-size: 0.6em; font-weight: 400; color: var(--tinta-suave); white-space: nowrap; }
+
+/* Más información sobre las viviendas vacías (pestaña Vacías) y el enlace desde otras pestañas */
+.info-vacias { border: 1px solid var(--borde); background: var(--fondo-suave); border-radius: 6px; padding: 4px 12px; margin: 12px 0 16px; }
+.info-vacias > summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
+.info-vacias h3 { font-size: 16px; margin: 16px 0 4px; }
+.info-vacias p, .info-vacias li { font-size: 15px; }
+.info-vacias p.fuente { font-size: 12px; }
+.info-vacias ul { padding-left: 20px; }
+/* Las dos columnas («de más» y «de menos») con el mismo ancho y el mismo formato */
+.info-vacias table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 8px 0; font-size: 14px; }
+.info-vacias th, .info-vacias td { width: 50%; vertical-align: top; text-align: left; padding: 6px 8px; border-top: 1px solid var(--borde); background: var(--fondo); }
+.info-vacias th { font-weight: 400; }
+.enlace-vacias { margin: 4px 0 16px; }
+/* Icono de información: una «i» en un círculo, delante del título del apartado y del enlace */
+.icono-info { display: inline-flex; align-items: center; justify-content: center; width: 1.25em; height: 1.25em; margin-right: 6px;
+  border-radius: 50%; background: #1d5fad; color: #fff; font: italic 700 0.8em/1 Georgia, serif; vertical-align: 0.1em; text-decoration: none; }
+.boton-enlace { background: none; border: 0; padding: 0; font: inherit; font-size: 14px; color: #1d5fad; text-decoration: underline; cursor: pointer; }
+/* En el móvil, una columna debajo de la otra, cada celda con su encabezado */
+@media (max-width: 600px) {
+  .info-vacias table, .info-vacias tbody, .info-vacias tr, .info-vacias td { display: block; width: 100%; }
+  .info-vacias thead { display: none; }
+  .info-vacias td::before { display: block; font-weight: 600; font-size: 12px; color: var(--tinta-suave); }
+  .info-vacias td:nth-child(1)::before { content: "Podría contar de más"; }
+  .info-vacias td:nth-child(2)::before { content: "Podría contar de menos"; }
+}

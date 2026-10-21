@@ -1,0 +1,4 @@
+# Los datos van en el zip de cada Release, no en git
+datos/
+*.zip
+_site/

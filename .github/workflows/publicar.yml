@@ -1,0 +1,73 @@
+# Publica la página en GitHub Pages: la página de este repositorio y los datos del zip de una Release.
+# Se ejecuta al publicar una Release y, a mano, desde la pestaña Actions (con la última Release).
+# Las cifras se comprueban antes, en el ordenador de quien prepara los datos; aquí solo se mira que el zip
+# esté completo.
+name: Publicar la página
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      - name: Bajar la página
+        uses: actions/checkout@v4
+
+      - name: Bajar el zip de datos de la Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ETIQUETA: ${{ github.event.release.tag_name }}
+        run: |
+          mkdir descarga
+          if [ -n "$ETIQUETA" ]; then
+            gh release download "$ETIQUETA" --repo "$GITHUB_REPOSITORY" --pattern 'datos_sitio_*.zip' --dir descarga
+          else
+            gh release download --repo "$GITHUB_REPOSITORY" --pattern 'datos_sitio_*.zip' --dir descarga
+          fi
+          ls -l descarga
+          test "$(ls descarga | wc -l)" -eq 1 || { echo "La Release tiene que llevar un solo zip datos_sitio_*.zip"; exit 1; }
+
+      - name: Montar el sitio y comprobar que el zip está completo
+        run: |
+          mkdir _site
+          cp index.html app.js csv.js estilo.css _site/
+          cp -r lib _site/
+          unzip -q descarga/datos_sitio_*.zip -d _site
+          test -f _site/datos/manifiesto.txt || { echo "El zip no tiene datos/manifiesto.txt"; exit 1; }
+          esperados=$(grep '^archivos:' _site/datos/manifiesto.txt | cut -d' ' -f2 | tr -d '\r')
+          hay=$(find _site/datos -type f ! -name manifiesto.txt | wc -l)
+          echo "Archivos de datos: $hay (el manifiesto dice $esperados)"
+          test "$hay" -eq "$esperados" || { echo "Faltan o sobran archivos en el zip"; exit 1; }
+          for f in buscador.json fuentes.json temas.json; do
+            test -s "_site/datos/$f" || { echo "Falta datos/$f"; exit 1; }
+          done
+          test -z "$(find _site -type l)" || { echo "El sitio no puede llevar enlaces simbólicos"; exit 1; }
+          du -sh _site
+
+      - name: Preparar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Empaquetar el sitio
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Publicar
+        id: despliegue
+        uses: actions/deploy-pages@v4
