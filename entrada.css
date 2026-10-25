@@ -1,0 +1,31 @@
+/* Página de entrada (portada): solo con la dirección principal, sin nada detrás de «#». Aprobada por el usuario el
+   24 de octubre de 2026. Tapa el resto de la página, que se sigue cargando debajo (España, pestaña Resumen). */
+
+html.con-portada { overflow: hidden; }
+/* Oculto pero con su tamaño, para que Leaflet mida bien el mapa al cargarse debajo */
+.con-portada .cabecera, .con-portada .pestanas, .con-portada .cuerpo, .con-portada .ir-ficha { visibility: hidden; }
+
+.portada {
+  position: fixed; inset: 0; z-index: 2000; overflow-y: auto; background: var(--fondo);
+}
+.portada[hidden] { display: none; }
+.portada-cuerpo {
+  min-height: 100%; display: flex; flex-direction: column; justify-content: center;
+  max-width: 640px; margin: 0 auto; padding: 32px 16px;
+}
+.portada .marca-intro { font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--tinta-suave); margin: 0 0 8px; }
+.portada h1 { font-size: clamp(28px, 6vw, 40px); line-height: 1.15; margin: 0 0 4px; }
+.portada .subtitulo { font-size: clamp(20px, 4vw, 26px); line-height: 1.2; color: var(--tinta-suave); margin: 0 0 20px; }
+.portada .entrada { font-size: 18px; margin: 0 0 24px; }
+.portada .temas-intro { margin: 0 0 32px; }
+.portada .temas-intro p { margin: 0 0 8px; color: var(--tinta-suave); }
+.portada ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.portada li {
+  padding: 4px 12px; border-radius: 999px; font-size: 15px;
+  border: 1px solid var(--borde); border-left: 6px solid var(--color);
+}
+.portada .boton-entrar {
+  align-self: center; padding: 12px 24px; font-size: 17px; font-weight: 600;
+  background: var(--tinta); color: #fff; border-radius: 8px; text-decoration: none;
+}
+.portada .boton-entrar:hover, .portada .boton-entrar:focus-visible { background: #000; }

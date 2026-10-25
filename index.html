@@ -7,11 +7,34 @@
 <meta name="description" content="Datos de vivienda de cada lugar de España, de la comunidad autónoma a la sección censal: viviendas turísticas, alquiler, vacías, segunda residencia y construcción.">
 <link rel="stylesheet" href="lib/leaflet.css">
 <link rel="stylesheet" href="estilo.css">
+<link rel="stylesheet" href="entrada.css">
 <script src="lib/leaflet.js" defer></script>
 <script src="csv.js" defer></script>
 <script src="app.js" defer></script>
 </head>
 <body>
+<section id="portada" class="portada" aria-label="Presentación" hidden>
+  <div class="portada-cuerpo">
+    <p class="marca-intro">Vivienda en España</p>
+    <h1>La vivienda en España, en datos</h1>
+    <p class="subtitulo">De tu región a tu barrio</p>
+    <p class="entrada">Mira cómo ha cambiado el alquiler, cuántas viviendas están vacías o se anuncian para turistas, y cuánto se construye.</p>
+    <div class="temas-intro">
+      <p>Explora los temas:</p>
+      <!-- Colores de COLOR_TEMA en app.js -->
+      <ul>
+        <li style="--color:#eb6834">Alquiler</li>
+        <li style="--color:#2a78d6">Compra</li>
+        <li style="--color:#6250d6">Vacías</li>
+        <li style="--color:#e87ba4">Turísticas</li>
+        <li style="--color:#eda100">Segunda residencia y poco uso</li>
+        <li style="--color:#3a3a38">Construcción</li>
+      </ul>
+    </div>
+    <a class="boton-entrar" href="#/nacional/00?tema=resumen">Empezar</a>
+  </div>
+</section>
+<script src="entrada.js"></script>
 <header class="cabecera">
   <a class="marca" href="#/">Vivienda en España</a>
   <div class="buscador" role="search">

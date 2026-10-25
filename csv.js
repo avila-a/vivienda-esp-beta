@@ -13,6 +13,7 @@ function filasDescarga(ficha, col) {
   for (const b of ficha.bloques) {
     if (b.id === "anuncios") continue;   // fuente no oficial, sin permiso para redistribuirla
     for (const x of b.cifras) {
+      if (x.rango) continue;   // rango de las áreas que contiene: cifra propia de la página, no va en la descarga
       const avisos = x.avisos.map((i) => ficha.avisos[i]).join("; ");
       filas.push([x.columna, info(x.columna).titulo || x.columna, x.valor == null ? "" : x.valor, avisos,
                   info(x.columna).fuente || "", info(x.columna).fecha || ""]);

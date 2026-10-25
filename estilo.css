@@ -64,6 +64,12 @@ html, body { overflow-x: hidden; }
   background: var(--fondo); border-radius: 6px; cursor: pointer;
 }
 .capas button[aria-pressed="true"] { background: var(--tinta); color: #fff; border-color: var(--tinta); }
+.boton-colores {
+  font: inherit; font-size: 13px; padding: 4px 10px; background: var(--fondo); color: var(--tinta);
+  cursor: pointer; border-radius: 6px;
+}
+.boton-colores[aria-pressed="true"] { background: var(--tinta); color: #fff; }
+.boton-colores[hidden] { display: none; }
 #mapa { height: 45vh; min-height: 280px; border: 1px solid var(--borde); border-radius: 8px; background: #eef1f4; }
 .leyenda { font-size: 13px; padding: 8px 0 16px; color: var(--tinta-suave); }
 .leyenda h3 { font-size: 14px; margin: 0 0 4px; color: var(--tinta); }
@@ -71,6 +77,8 @@ html, body { overflow-x: hidden; }
 .leyenda li { display: flex; align-items: center; gap: 6px; }
 .muestra { display: inline-block; width: 16px; height: 12px; border: 1px solid #999; }
 .muestra.discontinua { background: transparent; border: 2px dashed #222; }
+.muestra.redonda { width: 12px; border-radius: 50%; border-color: #22211f; }
+.tamano-capitales { display: block; max-width: 100%; }
 .leyenda p { margin: 2px 0; }
 
 /* Ficha */
@@ -98,7 +106,8 @@ html, body { overflow-x: hidden; }
 .sin-datos { margin: 8px 0; }
 
 .bloque { border-top: 1px solid var(--borde); padding: 4px 0; }
-.bloque > summary { cursor: pointer; padding: 8px 0; font-weight: 600; list-style-position: outside; }
+/* La flecha dentro de la columna, como en «Ver los datos del gráfico» (pedido por el usuario el 21 de octubre de 2026) */
+.bloque > summary { cursor: pointer; padding: 8px 0; font-weight: 600; list-style-position: inside; }
 .bloque > summary .marca-aviso { margin-left: 6px; font-weight: 600; }
 .cifras { margin: 0; }
 .cifra { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 6px 0; border-bottom: 1px dotted var(--borde); }
@@ -191,6 +200,11 @@ html, body { overflow-x: hidden; }
 .tarjeta.elegida .numero { font-size: 32px; }
 .tarjeta.elegida .que-es-tarjeta { font-size: 13px; color: var(--tinta-suave); margin-top: 4px; }
 .tarjeta.elegida .aviso { display: block; }
+/* Rangos (prompt 11): de qué área a qué área, y la nota de que no es la cifra del lugar */
+.tarjeta .detalle, .cifras .detalle { font-size: 13px; color: var(--tinta-suave); }
+.tarjeta.elegida .detalle { font-size: 15px; color: var(--tinta); }
+.tarjeta.elegida .nota-rango { font-size: 12px; color: var(--tinta-suave); margin-top: 4px; }
+.rango-svg circle.bola { cursor: pointer; }
 button.tarjeta { cursor: pointer; }
 button.tarjeta:hover { border-color: var(--borde); background: var(--fondo); }
 .tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin: 8px 0 16px; }
@@ -220,8 +234,8 @@ button.tarjeta:hover { border-color: var(--borde); background: var(--fondo); }
 .zona-ficha h1 .codigo { font-size: 0.6em; font-weight: 400; color: var(--tinta-suave); white-space: nowrap; }
 
 /* Más información sobre las viviendas vacías (pestaña Vacías) y el enlace desde otras pestañas */
-.info-vacias { border: 1px solid var(--borde); background: var(--fondo-suave); border-radius: 6px; padding: 4px 12px; margin: 12px 0 16px; }
-.info-vacias > summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
+.info-vacias, .plegado { border: 1px solid var(--borde); background: var(--fondo-suave); border-radius: 6px; padding: 4px 12px; margin: 12px 0 16px; }
+.info-vacias > summary, .plegado > summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
 .info-vacias h3 { font-size: 16px; margin: 16px 0 4px; }
 .info-vacias p, .info-vacias li { font-size: 15px; }
 .info-vacias p.fuente { font-size: 12px; }

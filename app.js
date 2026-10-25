@@ -5,7 +5,9 @@
 // La entrada es España.
 "use strict";
 
-const DATOS = "datos/";
+// Carpeta de los datos: toda España (datos/) o, con ?datos=prueba en la dirección, la prueba local de Sevilla
+// (datos_prueba/, ver zona.R)
+const DATOS = new URLSearchParams(location.search).get("datos") === "prueba" ? "datos_prueba/" : "datos/";
 const NIVELES = ["nacional", "ccaa", "provincia", "municipio", "distrito", "seccion"];
 const NOMBRE_NIVEL = { nacional: "España", ccaa: "las comunidades autónomas", provincia: "las provincias", municipio: "los municipios",
   distrito: "los distritos", seccion: "las secciones censales" };
@@ -16,12 +18,16 @@ const MESES = {
   agosto:    { num: 8,  color: "#e87ba4", forma: "circulo" },
   noviembre: { num: 11, color: "#8a8880", forma: "rombo" },
 };
-const ORDEN_CAPAS = ["provincias", "municipios", "distritos", "secciones"];
-const NOMBRE_CAPA = { distritos: "Distritos", secciones: "Secciones censales", municipios: "Municipios", provincias: "Provincias" };
+const ORDEN_CAPAS = ["provincias", "municipios", "zonas", "distritos", "secciones"];
+const NOMBRE_CAPA = { distritos: "Distritos", secciones: "Secciones censales", municipios: "Municipios", provincias: "Provincias",
+  zonas: "Zonas de Urban Audit" };
+// Mapas que solo tienen las cifras de la pestaña Compra: no se abren si la cifra elegida no está en ninguno
+const SOLO_COMPRA = /^(zonas_|municipios_venta$)/;
 const SIN_DATO = "#d6d6d6";
 // Color de cada tema, el de colores_proyecto (0_funciones.R): para la barra del lugar en las comparaciones
-const COLOR_TEMA = [[/^turistic/, "#e87ba4"], [/^(alquil|anuncio)/, "#eb6834"], [/^no_principales/, "#eda100"],
-  [/^(vacia|menos_de|uno_a)/, "#6250d6"], [/^(construid|anios_)/, "#3a3a38"]];
+const COLOR_TEMA = [[/^construidas_protegidas/, "#1baf7a"], [/^turistic/, "#e87ba4"], [/^(alquil|anuncio)/, "#eb6834"], [/^no_principales/, "#eda100"],
+  [/^(vacia|menos_de|uno_a)/, "#6250d6"], [/^(construid|anios_)/, "#3a3a38"], [/^(precio_venta|compras)/, "#2a78d6"]];
+const AZUL_CLARO = "#9cc3ef";   // la otra medida del precio de venta, y la otra línea de las compras
 const GRIS = "#c9c7c0";
 const TINTA = "#22211f", TINTA_SUAVE = "#5c5a55", REJILLA = "#e4e2dc";
 
@@ -74,7 +80,8 @@ const estado = {
   mapa: null, fondo: null, capa: null, cajaCanarias: null, grupo: null, meta: null,
   temas: null, tema: "resumen", columna: null,
   ficha: null, col: null, porCodigo: new Map(), cifras: new Map(),
-  capaElegida: {}, desdeMapa: false, infoVacias: false,
+  capaElegida: {}, desdeMapa: false, infoVacias: false, infoTuristicas: false,
+  sinColor: false, botonColor: null,   // colores del mapa quitados, para ver las calles
   metas: new Map(),   // cabecera de cada mapa ya cargado: qué áreas tienen mapa propio por debajo
 };
 
@@ -133,7 +140,12 @@ function htmlInfoVacias(abierta) {   // abierta o cerrada, se conserva al volver
   return '<details class="info-vacias" id="info-vacias"' + (abierta ? " open" : "") + "><summary>" + ICONO_INFO + "Más información sobre las viviendas vacías</summary>" +
     estado.temas.info_vacias + "</details>";
 }
-const htmlEnlaceVacias = () => '<p class="enlace-vacias"><button type="button" class="boton-enlace" data-ir-vacias>' + ICONO_INFO + 'Más información sobre las viviendas vacías</button></p>';
+// «Más información sobre las viviendas turísticas»: en la pestaña Turísticas, con el mismo formato (21 de octubre de 2026)
+function htmlInfoTuristicas(abierta) {
+  return '<details class="info-vacias" id="info-turisticas"' + (abierta ? " open" : "") + "><summary>" + ICONO_INFO + "Más información sobre las viviendas turísticas</summary>" +
+    estado.temas.info_turisticas + "</details>";
+}
+const htmlEnlaceVacias =() => '<p class="enlace-vacias"><button type="button" class="boton-enlace" data-ir-vacias>' + ICONO_INFO + 'Más información sobre las viviendas vacías</button></p>';
 // Desde otra pestaña: abre la pestaña Vacías del mismo lugar, con el apartado abierto
 function irAInfoVacias() {
   estado.tema = "vacias";
@@ -165,6 +177,43 @@ function iniciarMapa() {
     maxZoom: 19,
   });
   estado.mapa.setView([40, -4], 5);
+  // Leaflet solo mira el tamaño al cambiar la ventana; la leyenda y los botones también lo cambian
+  if (window.ResizeObserver) new ResizeObserver(() => estado.mapa.invalidateSize({ pan: false })).observe($("mapa"));
+  // Botón para quitar y poner los colores: quedan solo los bordes y se ven las calles del fondo
+  const Boton = L.Control.extend({
+    onAdd() {
+      const b = L.DomUtil.create("button", "boton-colores leaflet-bar");
+      b.type = "button";
+      L.DomEvent.disableClickPropagation(b);
+      L.DomEvent.on(b, "click", () => { estado.sinColor = !estado.sinColor; pintarColores(); });
+      estado.botonColor = b;
+      pintarBotonColor();
+      return b;
+    },
+  });
+  new Boton({ position: "topright" }).addTo(estado.mapa);
+}
+
+// Colores quitados, salvo en el mapa de provincias, que no tiene calles de fondo (Canarias va desplazada)
+const quitarColores = () => estado.sinColor && !(estado.meta && estado.meta.canarias_desplazada);
+
+function pintarColores() {
+  const sin = quitarColores();
+  pintarBotonColor();
+  estado.fondo.setOpacity(sin ? 1 : 0.6);
+  if (estado.capaFondo) estado.capaFondo.setStyle({ fillOpacity: sin ? 0 : 1 });
+  if (estado.capa) estado.capa.setStyle(estilo);
+  if (estado.capa) pintarCirculos();
+}
+
+function pintarBotonColor() {
+  const b = estado.botonColor;
+  if (!b) return;
+  // Solo en los mapas con calles de fondo
+  b.hidden = !!(estado.meta && estado.meta.canarias_desplazada);
+  b.textContent = estado.sinColor ? "Poner colores" : "Quitar colores";
+  b.setAttribute("aria-pressed", String(estado.sinColor));
+  b.title = estado.sinColor ? "Volver a colorear las áreas" : "Dejar solo los bordes para ver las calles";
 }
 
 // El área de la ficha, o las áreas que contiene si es una comunidad, un municipio o un distrito (los mapas de
@@ -172,13 +221,40 @@ function iniciarMapa() {
 function esElegida(p) {
   const f = estado.ficha;
   if (!f) return false;
-  if (p.codigo === f.codigo) return true;
+  // Mismo código solo si el mapa es del nivel de la ficha: comunidades y provincias comparten códigos (01 es
+  // Andalucía y Álava)
+  if (estado.meta && estado.meta.nivel === f.nivel && p.codigo === f.codigo) return true;
+  // La zona de Urban Audit de una sección o de un distrito (pestaña Compra)
+  if (f.compra && f.compra.zona && f.compra.zona.codigo === p.codigo) return true;
   if (f.nivel === "municipio") return p.mun === f.codigo;
-  return (f.nivel === "ccaa" || f.nivel === "distrito") && p.padre === f.codigo;
+  // Comunidad: sus provincias, o sus municipios con precio de venta (mapa de España); en el mapa de los municipios de
+  // la comunidad, el padre es la provincia y no se resalta ninguno
+  if (f.nivel === "ccaa") return !!estado.meta && (estado.meta.nivel === "provincia" || estado.meta.grupo === "municipios_venta") && p.padre === f.codigo;
+  return f.nivel === "distrito" && p.padre === f.codigo;
 }
 
-// Posición (desde 1) de la variable elegida en el mapa cargado; 0 si el mapa no la tiene
-const indiceVariable = () => estado.meta ? estado.meta.variables.findIndex((v) => v.columna === estado.columna) + 1 : 0;
+// Columna que colorea el mapa: la elegida. En la pestaña Compra, los distritos y las secciones no tienen ninguna cifra,
+// pero en las 17 ciudades con zonas de Urban Audit tienen el mapa de zonas: se colorea con la primera cifra del tema
+// que esté en alguno de sus mapas (la subida del precio por m²)
+function columnaMapa() {
+  if (estado.columna) return estado.columna;
+  const f = estado.ficha;
+  if (!f || !f.mapa || temaActual().id !== "compra") return null;
+  const enMapas = new Set();
+  Object.values(f.mapa.variables).forEach((l) => l.forEach((i) => enMapas.add(estado.temas.variables_mapa[i])));
+  const v = temaActual().variables.find((x) => x.mapa && enMapas.has(x.columna));
+  return v ? v.columna : null;
+}
+
+// Posición (desde 1) de la variable del mapa en el mapa cargado; 0 si el mapa no la tiene
+const indiceVariable = () => estado.meta ? estado.meta.variables.findIndex((v) => v.columna === columnaMapa()) + 1 : 0;
+
+// Cifras que solo tienen las capitales (anuncios de elDiario.es): un círculo en cada capital, con el color de su clase
+// y el área que crece con la población, y las áreas en gris debajo (pedido por el usuario el 25 de octubre de 2026)
+const FONDO_GRIS = "#ecebe7";
+const R_MIN = 5, R_MAX = 22;   // radio en píxeles de la capital menos y más poblada de las 52
+const conCirculos = () => { const j = indiceVariable(); return !!(j && estado.meta.variables[j - 1].circulos && estado.meta.capitales); };
+const radioCapital = (pob, escala) => Math.sqrt(R_MIN * R_MIN + (R_MAX * R_MAX - R_MIN * R_MIN) * (pob - escala[0]) / (escala[1] - escala[0]));
 
 function estilo(feature) {
   const p = feature.properties;
@@ -187,23 +263,59 @@ function estilo(feature) {
   const clase = v ? p["c" + j] : 0;
   const conAviso = v && p["a" + j];
   const elegida = esElegida(p);
+  if (conCirculos()) return {
+    fillColor: FONDO_GRIS, fillOpacity: quitarColores() ? 0 : 1,
+    color: elegida ? "#000" : quitarColores() ? "#222" : "#fff", weight: elegida ? 3 : 0.6, dashArray: null,
+  };
   return {
     fillColor: clase > 0 ? v.clases[clase - 1].color : SIN_DATO,
-    fillOpacity: estado.meta.canarias_desplazada ? 0.95 : 0.8,
-    color: elegida ? "#000" : conAviso ? "#222" : "#fff",
+    // Sin colores, un relleno invisible: el área se sigue pudiendo pulsar
+    fillOpacity: quitarColores() ? 0 : estado.meta.canarias_desplazada ? 0.95 : 0.8,
+    color: elegida ? "#000" : conAviso || quitarColores() ? "#222" : "#fff",
     weight: elegida ? 3 : conAviso ? 1.5 : 0.6,
     dashArray: conAviso && !elegida ? "4 3" : null,
   };
 }
 
-function textoTooltip(p) {
+function textoTooltip(p, capital) {
   const j = indiceVariable();
   const v = j ? estado.meta.variables[j - 1] : null;
   let h = "<strong>" + esc(p.titulo) + "</strong>";
+  if (capital && estado.meta.nivel !== "municipio") h += "<br>Capital: " + esc(capital.nombre);
   if (v) h += "<br>" + esc(v.titulo) + ": " + esc(p["x" + j]);
   if (v && p["a" + j]) h += '<br><span class="marca-aviso">⚠ ' + esc(p["a" + j]) + "</span>";
+  if (capital) h += "<br>Población de " + esc(capital.nombre) + ": " + esc(capital.texto_poblacion) + " habitantes";
   return h;
 }
+
+// Los círculos de las capitales, encima de las áreas; se rehacen al cambiar de cifra o de lugar
+function pintarCirculos() {
+  if (estado.capaCirculos) { estado.capaCirculos.remove(); estado.capaCirculos = null; }
+  if (!conCirculos()) return;
+  const j = indiceVariable();
+  const v = estado.meta.variables[j - 1];
+  const cap = estado.meta.capitales;
+  // Los grandes primero, para que los pequeños queden encima
+  const puntos = cap.puntos.slice().sort((a, b) => b.poblacion - a.poblacion);
+  estado.capaCirculos = L.featureGroup(puntos.map((c) => {
+    const area = estado.porCodigo.get(c.codigo);
+    const p = area ? area.feature.properties : { codigo: c.codigo, titulo: c.nombre };
+    const clase = p["c" + j] || 0;
+    const elegida = esElegida(p), conAviso = !!p["a" + j];
+    const m = L.circleMarker([c.lat, c.lon], {
+      radius: radioCapital(c.poblacion, cap.escala),
+      fillColor: clase > 0 ? v.clases[clase - 1].color : SIN_DATO, fillOpacity: 0.95,
+      color: elegida ? "#000" : TINTA, weight: elegida ? 3 : conAviso ? 1.5 : 1, dashArray: conAviso && !elegida ? "3 2" : null,
+    });
+    m.bindTooltip(() => textoTooltip(p, c), { sticky: true });
+    if (area) m.on("click", () => {
+      estado.desdeMapa = true;
+      location.hash = direccion(estado.meta.nivel, c.codigo);
+    });
+    return m;
+  })).addTo(estado.mapa);
+}
+const circulosDelante = () => { if (estado.capaCirculos) estado.capaCirculos.bringToFront(); };
 
 async function verGrupo(grupo, encuadrarSiempre) {
   const datos = await cargar("mapas/" + grupo + ".json");
@@ -212,18 +324,28 @@ async function verGrupo(grupo, encuadrarSiempre) {
   if (nuevo) {
     if (estado.capa) estado.capa.remove();
     if (estado.cajaCanarias) { estado.cajaCanarias.remove(); estado.cajaCanarias = null; }
+    if (estado.capaFondo) { estado.capaFondo.remove(); estado.capaFondo = null; }
     estado.grupo = grupo;
     estado.meta = datos.meta;
     estado.porCodigo.clear();
     // Sin fondo en el mapa de provincias: Canarias va desplazada y no coincidiría con las calles
     if (datos.meta.canarias_desplazada) estado.fondo.remove();
     else estado.fondo.addTo(estado.mapa);
+    // Provincias en gris debajo de las áreas, sin poder pulsarlas (mapa de los municipios con precio de venta)
+    if (datos.meta.fondo) {
+      estado.capaFondo = L.geoJSON(datos.meta.fondo, { interactive: false,
+        style: { fillColor: "#ecebe7", fillOpacity: 1, color: "#fff", weight: 1 } }).addTo(estado.mapa);
+    }
     estado.capa = L.geoJSON(datos, {
       style: estilo,
       onEachFeature: (f, capa) => {
         estado.porCodigo.set(f.properties.codigo, capa);
         capa.bindTooltip(() => textoTooltip(f.properties), { sticky: true });
-        capa.on("click", () => {
+        // Al pasar por un área, su bola en los gráficos de rangos de la ficha (prompt 11)
+        capa.on("mouseover", () => marcarEnRangos(f.properties.codigo, true));
+        capa.on("mouseout", () => marcarEnRangos(f.properties.codigo, false));
+        // Las zonas de Urban Audit no tienen ficha: solo la etiqueta
+        if (!datos.meta.sin_ficha) capa.on("click", () => {
           estado.desdeMapa = true;
           location.hash = direccion(datos.meta.nivel, f.properties.codigo);
         });
@@ -234,16 +356,19 @@ async function verGrupo(grupo, encuadrarSiempre) {
       estado.cajaCanarias = L.rectangle(datos.meta.caja_canarias, { interactive: false, fill: false, color: "#8a8880", weight: 1 }).addTo(estado.mapa);
     }
   }
-  estado.capa.setStyle(estilo);
-  if (nuevo || encuadrarSiempre) encuadrar(nuevo);
+  pintarColores();
+  // La leyenda antes de encuadrar: cambia la altura del mapa, y con el mapa más bajo se cortaba Canarias
   pintarLeyenda();
+  if (nuevo || encuadrarSiempre) encuadrar(nuevo);
   performance.mark("mapa");   // marcas para medir.R: cuánto se tarda en cada cambio de lugar
 }
 
 function encuadrar(nuevo) {
+  estado.mapa.invalidateSize({ pan: false });   // el tamaño real del mapa, no el de cuando se creó
   const elegidas = [];
   estado.porCodigo.forEach((capa) => { if (esElegida(capa.feature.properties)) elegidas.push(capa); });
   elegidas.forEach((c) => c.bringToFront());
+  circulosDelante();
   const opciones = { padding: [12, 12], maxZoom: 15 };
   const todo = estado.capa.getBounds();
   if (elegidas.length > 1) {
@@ -268,28 +393,52 @@ function pintarLeyenda() {
     let motivo;
     if (!v) motivo = "Este tema no tiene cifras para " + NOMBRE_NIVEL[f.nivel] + ".";
     else if (!v.mapa) motivo = "«" + v.nombre + "» no colorea el mapa: solo la tienen unas pocas áreas.";
-    else motivo = "«" + v.nombre + "» no está en el mapa de " + esc(m.titulo.toLowerCase()) + ".";
+    else motivo = "«" + v.grupo + (v.nombre !== v.grupo ? " (" + v.nombre + ")" : "") + "» no está en el mapa de " + esc(m.titulo.toLowerCase()) + ".";
     $("leyenda").innerHTML = "<h3>" + esc(m.titulo) + "</h3><p>" + esc(motivo) + "</p>";
     return;
   }
   const v = m.variables[j - 1];
+  const circulos = conCirculos();
   let hayAviso = false;
   estado.porCodigo.forEach((capa) => { if (capa.feature.properties["a" + j]) hayAviso = true; });
   let h = "<h3>" + esc(m.titulo) + ": " + esc(v.titulo) + "</h3><ul>";
-  h += v.clases.map((c) => '<li><span class="muestra" style="background:' + c.color + '"></span>' +
+  const forma = circulos ? "muestra redonda" : "muestra";
+  h += v.clases.map((c) => '<li><span class="' + forma + '" style="background:' + c.color + '"></span>' +
     esc(c.rotulo) + " (" + c.n + ")</li>").join("");
-  if (v.sin_dato) h += '<li><span class="muestra" style="background:' + SIN_DATO + '"></span>sin dato (' + v.sin_dato + ")</li>";
-  if (hayAviso) h += '<li><span class="muestra discontinua"></span>borde discontinuo: la cifra tiene aviso</li>';
+  // Con círculos, las áreas sin capital no tienen dato, y ya lo dice el texto de debajo
+  if (v.sin_dato && !circulos) h += '<li><span class="muestra" style="background:' + SIN_DATO + '"></span>' + esc(v.sin_dato_texto || "sin dato") + " (" + v.sin_dato + ")</li>";
+  if (hayAviso) h += '<li><span class="' + forma + ' discontinua"></span>borde discontinuo: la cifra tiene aviso</li>';
   h += "</ul>";
-  h += "<p>Entre paréntesis, cuántas áreas hay en cada clase.</p>";
+  if (circulos) h += htmlTamanoCapitales(m.capitales, m.nivel);
+  h += "<p>" + esc(v.clases_comunes || "Entre paréntesis, cuántas áreas hay en cada clase.") + "</p>";
   if (v.paleta === "variacion") h += "<p>Las subidas, de blanco (sin subida) a rojo oscuro: cuanto más sube, más cálido. Las bajadas, aparte, en azul claro.</p>";
   if (v.paleta === "calida") h += "<p>Cuanto más caro, más cálido.</p>";
+  if (v.nota) h += "<p>" + esc(v.nota) + "</p>";
   h += "<p>Datos: " + esc([v.fuente, v.fecha].filter(Boolean).join(", ")) + ".</p>";
   if (DE_ELDIARIO.test(v.columna)) h += htmlCita();
   if (f && m.sin_contorno.indexOf(f.codigo) >= 0) {
     h += '<p class="marca-aviso">' + esc(f.titulo) + " no está en el mapa: no tiene contorno en el Censo 2021.</p>";
   }
   $("leyenda").innerHTML = h;
+}
+
+// Leyenda del tamaño de los círculos de las capitales: la menos poblada de las 52, la mediana y la más poblada
+function htmlTamanoCapitales(cap, nivel) {
+  const pobs = cap.ejemplos;
+  const rs = pobs.map((p) => radioCapital(p, cap.escala));
+  const W = 260, H = 2 * R_MAX + 22;
+  let x = 4, s = "";
+  pobs.forEach((p, i) => {
+    const cx = x + rs[i];
+    s += '<circle cx="' + cx + '" cy="' + (R_MAX + 2 + R_MAX - rs[i]) + '" r="' + rs[i] + '" fill="none" stroke="' + TINTA_SUAVE + '"/>' +
+      '<text x="' + cx + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + TINTA_SUAVE + '">' + esc(numero(Math.round(p), 0)) + "</text>";
+    x = cx + rs[i] + 40;
+  });
+  const areas = nivel === "municipio" ? "Los municipios, en gris" : "Las provincias, en gris";
+  return '<p>Cada círculo es una capital de provincia, con el color de su cifra. ' + areas + ": elDiario.es solo cuenta los anuncios de las capitales.</p>" +
+    '<p>El tamaño del círculo crece con la población de la capital (habitantes: la capital menos poblada, la mediana de las capitales y la más poblada):</p>' +
+    '<svg class="tamano-capitales" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Tamaño del círculo según la población">' + s + "</svg>" +
+    "<p>Población: " + esc(cap.fuente_poblacion) + ".</p>";
 }
 
 // Botones para cambiar de mapa (las áreas que contiene la ficha, o las de su nivel), si hay más de uno
@@ -318,10 +467,12 @@ function verMapaDeFicha(f, fichaNueva) {
   if (f.mapa.grupo && candidatos.indexOf(f.mapa.grupo) < 0) candidatos.push(f.mapa.grupo);
   if (!candidatos.length) candidatos.push("provincias");
   // Qué variables colorea cada mapa: lo dice la ficha, con números de la lista variables_mapa de temas.json
-  const tiene = (g) => (f.mapa.variables[g] || []).some((i) => estado.temas.variables_mapa[i] === estado.columna);
+  const columna = columnaMapa();
+  const tiene = (g) => (f.mapa.variables[g] || []).some((i) => estado.temas.variables_mapa[i] === columna);
   const con = candidatos.filter(tiene);
   const elegida = estado.capaElegida[f.codigo];
-  const grupo = elegida && con.indexOf(elegida) >= 0 ? elegida : con[0] || (elegida && candidatos.indexOf(elegida) >= 0 ? elegida : candidatos[0]);
+  const normales = candidatos.filter((g) => !SOLO_COMPRA.test(g));
+  const grupo = elegida && con.indexOf(elegida) >= 0 ? elegida : con[0] || (elegida && candidatos.indexOf(elegida) >= 0 ? elegida : normales[0] || candidatos[0]);
   pintarCapas(con.length ? con : candidatos, grupo);
   return verGrupo(grupo, fichaNueva).then(() => {
     // Los otros mapas, pedidos ya, para que los botones no esperen a la red
@@ -362,10 +513,13 @@ function htmlTarjeta(f, v, elegida) {
   const avisos = x ? x.avisos : [];
   let h = (elegida ? '<div class="tarjeta elegida"' : '<button type="button" class="tarjeta" data-elegir="' + v.columna + '"') +
     ' data-columna="' + v.columna + '"><span class="numero">' + esc(x ? x.texto : "sin dato") + "</span>" +
+    // Un rango (la cifra de las áreas que contiene el lugar): de qué área a qué área
+    (x && x.rango ? '<span class="detalle">' + esc(x.rango.detalle) + "</span>" : "") +
     '<span class="etiqueta">' + esc(c.titulo || v.nombre) + "</span>" + (c.fecha ? '<span class="fecha">' + esc(conPeriodo(c.fecha, [f.periodo_construccion])) + "</span>" : "");
   if (elegida && avisos.length) h += '<span class="aviso"><ul>' + avisos.map((i) => "<li>⚠ " + esc(f.avisos[i]) + "</li>").join("") + "</ul></span>";
   else if (avisos.length) h += marcas(f, avisos);
-  if (elegida && c.que_es) h += '<span class="que-es-tarjeta">' + esc(c.que_es) + "</span>";
+  if (elegida && x && x.rango) h += '<span class="nota-rango">' + esc(x.rango.nota) + "</span>";
+  else if (elegida && c.que_es) h += '<span class="que-es-tarjeta">' + esc(c.que_es) + "</span>";
   return h + (elegida ? "</div>" : "</button>");
 }
 
@@ -381,8 +535,8 @@ function htmlBloque(f, b, col) {
     const c = col.columnas[x.columna] || {};
     return '<div class="cifra" data-columna="' + x.columna + '"><dt>' + esc(c.titulo || x.columna) +
       (c.que_es ? ' <button type="button" class="boton-que-es" aria-expanded="false" aria-label="Qué es">?</button>' : "") +
-      "</dt><dd>" + esc(x.texto) + " " + marcas(f, x.avisos) + "</dd>" +
-      (c.que_es ? '<dd class="que-es" hidden>' + esc(c.que_es) + (c.calculo && /dashboard/.test(c.calculo) ? " " + esc(c.calculo) : "") +
+      "</dt><dd>" + esc(x.texto) + (x.rango ? ' <span class="detalle">' + esc(x.rango.detalle) + "</span>" : "") + " " + marcas(f, x.avisos) + "</dd>" +
+      (c.que_es ? '<dd class="que-es" hidden>' + esc(c.que_es) + (c.calculo && /esta página/.test(c.calculo) ? " " + esc(c.calculo) : "") +
         (c.limites ? " " + esc(c.limites) : "") + "</dd>" : "") + "</div>";
   }).join("") + "</dl>";
   h += '<p class="fuente">Fuente: ' + esc(info.fuente) + ". Fecha: " + esc(conPeriodo(info.fecha, [f.periodo_construccion])) + ".</p>";
@@ -525,8 +679,10 @@ function svgBarras(filas, titulo) {
   return '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + g + "</svg>";
 }
 
-// El lugar frente a las áreas que lo contienen y España
-function htmlComparar(f, columna) {
+// El lugar frente a las áreas que lo contienen y España. `mas`: notas y HTML del final propios de la cifra (las
+// compras por no residentes)
+function htmlComparar(f, columna, mas) {
+  mas = mas || {};
   const c = estado.col.columnas[columna] || {};
   const titulo = c.titulo || columna;
   const ctx = f.contexto && f.contexto.cifras[columna];
@@ -539,9 +695,9 @@ function htmlComparar(f, columna) {
     filas.push({ etiqueta: (k === 0 ? "" : "") + corto(area.titulo), valor: x.valor, texto: x.texto, destacada: k === 0,
       color: k === 0 ? colorTema(columna) : GRIS, enlace: area.enlace });
   });
-  const notas = ["Barras: este lugar (en color) y las áreas que lo contienen, hasta España (en gris). Cada área, con la cifra de su tabla; sus avisos, en su ficha."];
+  const notas = ["Barras: este lugar (en color) y las áreas que lo contienen, hasta España (en gris). Cada área, con la cifra de su tabla; sus avisos, en su ficha."].concat(mas.notas || []);
   const fecha = conPeriodo(c.fecha, f.contexto.areas.map((a) => a.periodo));
-  const cita = DE_ELDIARIO.test(columna) ? htmlCita() : "";
+  const cita = (DE_ELDIARIO.test(columna) ? htmlCita() : "") + (mas.pie || "");
   if (ctx[0].valor == null) return htmlGrafico(titulo, '<p class="sin-grafico">Este lugar no tiene esta cifra: los avisos de la ficha dicen por qué.</p>', null, [], c.fuente, "", cita);
   if (filas.length === 1) notas.push("Las áreas que contienen este lugar no tienen esta cifra.");
   const tabla = tablaHtml(["Área", "Cifra"], ctx.map((x, k) => {
@@ -564,52 +720,417 @@ function htmlVariacion(f, columna) {
   if (!s) return "";
   const conAlquiler = filas.length > 0;
   filas.push({ etiqueta: "Salario mediano (" + s.ambito + ")", valor: s.salario.variacion, texto: s.salario.texto, color: "#3a3a38" });
-  filas.push({ etiqueta: "Precios (IPC de España)", valor: s.ipc.variacion, texto: s.ipc.texto, color: "#8a8880" });
+  filas.push({ etiqueta: "Precios (IPC de " + s.ipc.ambito + ")", valor: s.ipc.variacion, texto: s.ipc.texto, color: "#8a8880" });
   const titulo = "Subida de " + s.anio_inicio + " a " + s.anio_fin + ": alquiler, salario y precios";
   const cifra = (c) => { const x = estado.cifras.get(c); return x ? esc(x.texto) : "sin dato"; };
   const tabla = tablaHtml(["", String(s.anio_inicio), String(s.anio_fin), "Subida"], [
     ["Alquiler mediano al mes (pisos)", cifra("alquiler_mes_mediana_2015"), cifra("alquiler_mes_mediana_2024"), mes ? esc(mes.texto) : "sin dato"],
     ["Alquiler mediano por m² (pisos)", cifra("alquiler_m2_mediana_2015"), cifra("alquiler_m2_mediana_2024"), m2 ? esc(m2.texto) : "sin dato"],
     ["Salario mediano bruto al año (" + esc(s.ambito) + ")", esc(s.salario.texto_inicio), esc(s.salario.texto_fin), esc(s.salario.texto)],
-    ["Índice de precios de consumo (media anual)", numero(s.ipc.inicio, 1), numero(s.ipc.fin, 1), esc(s.ipc.texto)]]);
+    ["Índice de precios de consumo (media anual; 2025 = 100; " + esc(s.ipc.ambito) + ")", numero(s.ipc.inicio, 1), numero(s.ipc.fin, 1), esc(s.ipc.texto)]]);
   const notas = [];
   if (!conAlquiler) notas.push("Este lugar no tiene la subida del alquiler (ver los avisos): solo se ven el salario y los precios.");
-  notas.push("Euros de cada año, sin descontar la inflación: por eso va al lado la subida de los precios.",
-    "Salario: mediana de la ganancia bruta anual por trabajador de " + s.ambito + " (la mitad de los trabajadores gana menos y la otra mitad, más). " + s.salario.fuente + ".",
-    "Precios: " + s.ipc.fuente + ".",
+  notas.push(...notasSalarioIpc(s),
     "El alquiler es la mediana de los alquileres de pisos en vigor declarados a Hacienda (Ministerio de Vivienda): lo que pagan quienes ya tienen contrato, no el precio de los contratos nuevos. No es un índice de precios y la base crece de un año a otro.");
   if (s.nota) notas.push(s.nota);
   return htmlGrafico(titulo, svgBarras(filas, titulo), tabla, notas, null);
 }
 
+// Notas del salario y del IPC, en las subidas del alquiler y del precio de venta
+function notasSalarioIpc(s) {
+  return ["Euros de cada año, sin descontar la inflación: por eso va al lado la subida de los precios.",
+    "Salario: mediana de la ganancia bruta anual por trabajador de " + s.ambito + " (la mitad de los trabajadores gana menos y la otra mitad, más). " + s.salario.fuente + ".",
+    "Precios: " + s.ipc.fuente + ". El índice solo sirve para ver cuánto suben los precios en un mismo sitio: no dice si un sitio es más caro que otro." +
+      (s.ipc.nivel === "provincia" ? " El INE recoge los precios de la provincia en su capital y en otros municipios que, juntos, tienen al menos el 30% de su población." : "")];
+}
+
+// --- Pestaña Compra (decisiones del usuario, 22 y 23 de octubre de 2026; diseño en compra_diseno.md) -----------------
+
+const NOTA_VENTA = "Precio de venta: media de lo que se pagó por las viviendas libres (pisos y unifamiliares) vendidas cada año ante notario, también por empresas; la calcula el INE con datos del Consejo General del Notariado. No es un índice de precios: si cambia lo que se vende (zona, tamaño, nueva o usada), cambia la media.";
+// Años de la subida del precio de venta: los de las columnas de las tablas por nivel (precio_venta_m2_2015 y _2024)
+const ANIOS_VENTA = [2015, 2024];
+// «2010–2025»: el primer y el último año de los puntos de una serie
+const anios = (puntos) => puntos[0].anio + "–" + puntos[puntos.length - 1].anio;
+const plegado = (resumen, html) => '<details class="plegado"><summary>' + esc(resumen) + "</summary>" + html + "</details>";
+
+// Líneas en el tiempo: cada línea, { nombre, color, pts: [{ x, y, et }] }, cortada donde falta un periodo (`paso`: 1 en
+// los años, 0,5 en los semestres); se rotulan los puntos de la primera línea en las x de `rotular`
+function svgLineas(lineas, x0, x1, paso, fmtY, titulo, rotular) {
+  const W = anchoGrafico(), H = estrecha() ? 230 : 260, m = { izq: 66, der: 22, arr: 26, abj: 30 };
+  const sx = (x) => m.izq + ((x - x0) / (x1 - x0)) * (W - m.izq - m.der);
+  const ymax = Math.max(...lineas.flatMap((l) => l.pts.map((p) => p.y)));
+  const pasoX = Math.ceil((x1 - x0) / (W < 420 ? 4 : W < 600 ? 6 : 8));
+  const { g: base, sy } = marco(W, H, m, ymax, fmtY, x0, Math.floor(x1), sx, pasoX);
+  let g = base;
+  for (const l of lineas) {
+    const pts = l.pts.slice().sort((a, b) => a.x - b.x);
+    let tramo = [];
+    const tramos = [];
+    pts.forEach((p, i) => {
+      if (i && p.x - pts[i - 1].x > paso + 1e-9) { tramos.push(tramo); tramo = []; }
+      tramo.push(p);
+    });
+    if (tramo.length) tramos.push(tramo);
+    for (const t of tramos) if (t.length > 1) g += '<polyline fill="none" stroke="' + l.color + '" stroke-width="2" points="' + t.map((q) => sx(q.x) + "," + sy(q.y)).join(" ") + '"/>';
+    for (const q of pts) g += '<circle cx="' + sx(q.x) + '" cy="' + sy(q.y) + '" r="3.5" fill="' + l.color + '" stroke="#fff" stroke-width="1"><title>' + esc(l.nombre + ", " + q.nombre + ": " + q.et) + "</title></circle>";
+  }
+  const primera = lineas[0].pts.filter((q) => rotular.indexOf(q.x) >= 0);
+  // Un rótulo seguido de otro muy cerca (2024 y 2025) va debajo de su punto, para que no se pisen
+  const debajo = (q) => primera.some((o) => o.x > q.x && o.x - q.x <= 1.5);
+  for (const q of primera) g += '<text x="' + Math.min(Math.max(sx(q.x), m.izq + 24), W - m.der) + '" y="' + (sy(q.y) + (debajo(q) ? 20 : -10)) + '" text-anchor="' +
+    (sx(q.x) > W - m.der - 30 ? "end" : "middle") + '" font-size="12" font-weight="600" fill="' + TINTA + '" stroke="#fff" stroke-width="3" paint-order="stroke">' + esc(q.et) + "</text>";
+  const leyenda = lineas.length > 1 ? '<div class="leyenda-meses">' + lineas.map((l) => '<span><svg width="14" height="14" aria-hidden="true"><line x1="0" x2="14" y1="7" y2="7" stroke="' +
+    l.color + '" stroke-width="3"/></svg> ' + esc(l.nombre) + "</span>").join("") + "</div>" : "";
+  return leyenda + '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + g + "</svg>";
+}
+
+// Precio de venta, cada año de la serie: una línea; medida = m2 o medio
+function htmlSerieVenta(s, medida) {
+  const titulo = (medida === "m2" ? "Precio de venta por m², " : "Precio medio de venta, ") + anios(s.puntos);
+  const pts = s.puntos.map((p) => ({ x: p.anio, y: p[medida], et: medida === "m2" ? p.texto_m2 : p.texto_medio, nombre: String(p.anio) }));
+  const fmt = (y) => numero(y, 0) + " €";
+  const ultimo = pts.length ? pts[pts.length - 1].x : null;
+  const svg = svgLineas([{ nombre: titulo, color: colorTema("precio_venta"), pts }], pts[0].x, ultimo, 1, fmt, titulo, [2015, 2024, ultimo]);
+  const tabla = tablaHtml(["Año", "Por m²", "Precio medio"], s.puntos.map((p) => [p.anio, esc(p.texto_m2), esc(p.texto_medio)]));
+  return htmlGrafico(titulo, svg, tabla, s.notas, s.fuente);
+}
+
+// La subida del precio de venta de 2015 a 2024, con la diferencia en euros, junto a la del salario y la del IPC; debajo,
+// plegada, la serie entera. medida = m2 o medio
+function htmlVariacionVenta(f, medida) {
+  const s = f.salarios, serie = (f.series || {}).venta;
+  const nombres = { m2: "Precio de venta por m²", medio: "Precio medio de venta" };
+  const cifra = (m, que) => estado.cifras.get("precio_venta_" + m + "_" + que.replace("A0", ANIOS_VENTA[0]).replace("A1", ANIOS_VENTA[1]));
+  const texto = (m, que) => { const x = cifra(m, que); return x ? esc(x.texto) : "sin dato"; };
+  const titulo = nombres[medida] + ": subida de " + ANIOS_VENTA[0] + " a " + ANIOS_VENTA[1] + ", junto al salario y los precios";
+  const pie = serie ? plegado("Ver la serie entera, " + anios(serie.puntos), htmlSerieVenta(serie, medida)) : "";
+  const propia = cifra(medida, "variacion_pct_A0_A1");
+  if (!propia || propia.valor == null || !s) {
+    const avisos = propia ? propia.avisos.map((i) => f.avisos[i]) : [];
+    return htmlGrafico(titulo, '<p class="sin-grafico">Este lugar no tiene la subida del precio de venta.' + (avisos.length ? " ⚠ " + esc(avisos.join("; ")) : "") + "</p>", null, [], null, "", pie);
+  }
+  const orden = medida === "m2" ? ["m2", "medio"] : ["medio", "m2"];
+  const filas = [];
+  for (const m of orden) {
+    const x = cifra(m, "variacion_pct_A0_A1");
+    if (x && x.valor != null) filas.push({ etiqueta: nombres[m], valor: x.valor, texto: x.texto, color: m === medida ? colorTema("precio_venta") : AZUL_CLARO, destacada: m === medida });
+  }
+  filas.push({ etiqueta: "Salario mediano (" + s.ambito + ")", valor: s.salario.variacion, texto: s.salario.texto, color: "#3a3a38" });
+  filas.push({ etiqueta: "Precios (IPC de " + s.ipc.ambito + ")", valor: s.ipc.variacion, texto: s.ipc.texto, color: "#8a8880" });
+  const tabla = tablaHtml(["", String(ANIOS_VENTA[0]), String(ANIOS_VENTA[1]), "Diferencia", "Subida"],
+    orden.map((m) => [nombres[m], texto(m, "A0"), texto(m, "A1"), texto(m, "diferencia_A0_A1"), texto(m, "variacion_pct_A0_A1")]).concat([
+      ["Salario mediano bruto al año (" + esc(s.ambito) + ")", esc(s.salario.texto_inicio), esc(s.salario.texto_fin), esc(s.salario.texto_diferencia), esc(s.salario.texto)],
+      ["Índice de precios de consumo (media anual; 2025 = 100; " + esc(s.ipc.ambito) + ")", numero(s.ipc.inicio, 1), numero(s.ipc.fin, 1), "—", esc(s.ipc.texto)]]));
+  const notas = [NOTA_VENTA].concat(notasSalarioIpc(s));
+  if (s.nota) notas.push(s.nota);
+  return htmlGrafico(titulo, svgBarras(filas, titulo), tabla, notas, null, "", pie);
+}
+
+// Compras por no residentes, cada año de la serie: dos líneas, todos los no residentes y los extranjeros no residentes
+function htmlSerieCompras(s, columna) {
+  const titulo = "Compras de vivienda por no residentes, en % de las compraventas, " + anios(s.puntos);
+  const extranjeros = /extranjeros/.test(columna);
+  const linea = (ext) => ({ nombre: ext ? "Extranjeros no residentes" : "Todos los no residentes", color: ext === extranjeros ? colorTema("compras") : AZUL_CLARO,
+    pts: s.puntos.map((p) => ({ x: p.anio, y: ext ? p.pct_ext : p.pct_nores, et: ext ? p.texto_pct_ext : p.texto_pct_nores, nombre: String(p.anio) })) });
+  const ultimo = s.puntos[s.puntos.length - 1].anio;
+  const primero = s.puntos[0].anio;
+  const svg = svgLineas([linea(extranjeros), linea(!extranjeros)], primero, ultimo, 1, (y) => numero(y, y % 1 ? 1 : 0) + "%", titulo, [primero, ultimo]);
+  const tabla = tablaHtml(["Año", "Compraventas", "Todos los no residentes", "%", "Extranjeros no residentes", "%"],
+    s.puntos.map((p) => [p.anio, esc(p.total), esc(p.nores), esc(p.texto_pct_nores), esc(p.ext), esc(p.texto_pct_ext)]));
+  return htmlGrafico(titulo, svg, tabla, s.notas, s.fuente);
+}
+function htmlCompras(f, columna) {
+  const s = (f.series || {}).compras;
+  const [, a0, a1] = columna.match(/_([0-9]{4})_([0-9]{4})$/);   // los años sumados, del nombre de la columna (…_2022_2025)
+  return htmlComparar(f, columna, {
+    notas: ["Se mide a quien compra: no hay datos publicados de quien vende. Cifra de " + a0 + " a " + a1 + " juntos: compras de esos años ÷ compraventas de esos años (no es la media de los % de cada año). Cada año, en la serie."],
+    pie: s ? plegado("Ver la serie entera, " + anios(s.puntos), htmlSerieCompras(s, columna)) : "" });
+}
+
+// Precio por m² según quién compra (Notariado), por semestre: dato secundario, plegado, en España y en las comunidades
+function htmlNotariado(s) {
+  // España: españoles, extranjeros residentes y no residentes; una comunidad: la suya y la de España
+  const colores = s.lineas.length === 2 ? [colorTema("precio_venta"), "#8a8880"] : ["#3a3a38", AZUL_CLARO, colorTema("precio_venta")];
+  const titulo = "Precio por m² según quién compra, por semestre";
+  const sem = (p) => (p.semestre === 1 ? "1.er" : "2.º") + " semestre de " + p.anio;
+  const lineas = s.lineas.map((l, i) => ({ nombre: l.etiqueta, color: colores[i],
+    pts: l.puntos.map((p) => ({ x: p.anio + (p.semestre - 1) / 2, y: p.valor, et: p.texto, nombre: sem(p) })) }));
+  const todas = s.lineas.concat(s.solo_tabla || []);
+  const ultimo = todas[0].puntos[todas[0].puntos.length - 1];
+  // La línea que se rotula: los no residentes en España (la tercera), la comunidad en las comunidades (la primera)
+  const rotulada = lineas.length === 3 ? [lineas[2], lineas[0], lineas[1]] : lineas;
+  const svg = svgLineas(rotulada, todas[0].puntos[0].anio, ultimo.anio + 0.5, 0.5, (y) => numero(y, 0) + " €", titulo, [ultimo.anio + (ultimo.semestre - 1) / 2]);
+  const tabla = tablaHtml(["Semestre"].concat(todas.map((l) => l.etiqueta)),
+    todas[0].puntos.map((p, k) => [sem(p)].concat(todas.map((l) => l.puntos[k] ? esc(l.puntos[k].texto) : "sin dato"))));
+  return plegado("Precio por m² según quién compra (Notariado)", htmlGrafico(titulo, svg, tabla, s.notas, s.fuente));
+}
+
+// Lo que la pestaña añade debajo del gráfico: el Notariado
+function htmlExtrasCompra(f) {
+  const s = f.series || {};
+  return s.notariado ? htmlNotariado(s.notariado) : "";
+}
+
+// La zona de Urban Audit de una sección (o de un distrito entero) de las 17 ciudades: su precio, que es el de toda la zona
+// (decisión del usuario, 23 de octubre de 2026)
+function htmlZonaLugar(z) {
+  if (z.sin) return '<p class="sin-tema">' + esc(z.sin) + "</p>";
+  const c = z.cifras;
+  const tabla = tablaHtml(["", "2015", "2024", "Subida"], [
+    ["Precio de venta por m²", esc(c.m2_2015.texto), esc(c.m2_2024.texto), esc(c.m2_subida.texto)],
+    ["Precio medio de venta", esc(c.medio_2015.texto), esc(c.medio_2024.texto), esc(c.medio_subida.texto)]]);
+  return '<section class="grafico"><h2>Precio de venta de su zona: ' + esc(z.titulo) + "</h2><p>" + esc(z.texto) + "</p>" +
+    (z.aviso ? '<div class="aviso"><ul><li>⚠ ' + esc(z.aviso) + "</li></ul></div>" : "") + tabla +
+    '<ul class="notas"><li>Zonas de Urban Audit: el INE junta secciones censales en zonas de 5.000 a 40.000 habitantes, que define cada ayuntamiento. La zona está marcada en el mapa.</li>' +
+    "<li>" + esc(NOTA_VENTA) + " Euros de cada año, sin descontar la inflación.</li>" +
+    "<li>Subida: cálculo de esta página con los precios del INE; no está en la descarga.</li>" +
+    "<li>Fuente: INE, Indicadores Urbanos: precio medio de compraventa de la vivienda libre (datos notariales), zonas de Urban Audit (tabla 69337); secciones de cada zona: INE, Indicadores Urbanos, ámbitos territoriales (edición 2026).</li></ul></section>";
+}
+// Por qué no hay precio de venta en este nivel; en las 17 ciudades, la zona del lugar y el enlace al mapa de zonas
+function htmlNotaCompra(f) {
+  if (!f.compra) return "";
+  return '<p class="sin-tema">' + esc(f.compra.nota) + "</p>" + (f.compra.zona ? htmlZonaLugar(f.compra.zona) : "") +
+    (f.compra.zonas ? '<p class="sin-tema"><a href="' + direccion("municipio", f.compra.zonas.enlace.split("/").pop()) + '">' + esc(f.compra.zonas.texto) + "</a></p>" : "");
+}
+
 // Viviendas construidas por año: columnas, con la media que se usa en la ficha marcada
-function htmlConstruccion(s) {
+// De España a provincia (Ministerio), libres y protegidas apiladas, como en 3l (pedido por el usuario el 25 de octubre
+// de 2026). `columna`: la media que marca la línea (la de todas las construidas o la de las protegidas)
+const VERDE_PROTEGIDAS = "#1baf7a";   // cesion en colores_proyecto: verde = vivienda protegida, como en los pósteres
+// Con la media de las protegidas, solo las protegidas, con su escala: con las libres, su media quedaba pegada al eje
+function htmlConstruccion(s, columna) {
   if (!s) return htmlGrafico("Viviendas construidas por año", '<p class="sin-grafico">Sin datos de construcción para esta área.</p>', null, [], null);
+  if (columna === "construidas_protegidas_al_anio" && s.protegidas) {
+    s = Object.assign({}, s, { titulo: "Viviendas protegidas terminadas cada año", valores: s.protegidas, textos: s.textos_protegidas, total: s.textos,
+      libres: null, solo_protegidas: true });
+  }
   const W = anchoGrafico(), H = estrecha() ? 230 : 260, m = { izq: 56, der: 12, arr: 34, abj: 30 };
   const x0 = s.anios[0], x1 = s.anios[s.anios.length - 1];
   const ancho = (W - m.izq - m.der) / (x1 - x0 + 1);
   const sx = (a) => m.izq + (a - x0 + 0.5) * ancho;
-  const media = estado.cifras.get("construidas_al_anio"), periodo = estado.cifras.get("construidas_periodo");
+  const deProtegidas = columna === "construidas_protegidas_al_anio";
+  const media = estado.cifras.get(columna || "construidas_al_anio"), periodo = estado.cifras.get("construidas_periodo");
   const { g: base, sy } = marco(W, H, m, Math.max(1, ...s.valores, media && media.valor ? media.valor : 0),
     (y) => y.toLocaleString("es-ES"), x0, x1, sx, W < 480 ? 10 : 5);
   let g = base;
-  const color = s.tipo === "ministerio" ? "#3a3a38" : "#a8a6a0";
+  const apiladas = !!(s.libres && s.protegidas);
+  const color = s.solo_protegidas ? VERDE_PROTEGIDAS : s.tipo === "ministerio" ? "#3a3a38" : "#a8a6a0";
+  const barra = (a, y0, y1, fill, titulo) => '<rect x="' + (sx(a) - ancho * 0.4) + '" y="' + y1 + '" width="' + ancho * 0.8 + '" height="' + Math.max(y0 - y1, 0) +
+    '" fill="' + fill + '"><title>' + esc(titulo) + "</title></rect>";
   s.anios.forEach((a, i) => {
-    const y = sy(s.valores[i]);
-    g += '<rect x="' + (sx(a) - ancho * 0.4) + '" y="' + y + '" width="' + ancho * 0.8 + '" height="' + Math.max(H - m.abj - y, 0) + '" rx="1.5" fill="' + color + '"><title>' + a + ": " + esc(s.textos[i]) + " viviendas</title></rect>";
+    if (apiladas) {
+      const titulo = a + ": " + s.textos[i] + " viviendas (" + s.textos_libres[i] + " libres y " + s.textos_protegidas[i] + " protegidas)";
+      g += barra(a, sy(0), sy(s.libres[i]), color, titulo) + barra(a, sy(s.libres[i]), sy(s.valores[i]), VERDE_PROTEGIDAS, titulo);
+    } else {
+      const y = sy(s.valores[i]);
+      g += '<rect x="' + (sx(a) - ancho * 0.4) + '" y="' + y + '" width="' + ancho * 0.8 + '" height="' + Math.max(H - m.abj - y, 0) + '" rx="1.5" fill="' + color + '"><title>' + a + ": " + esc(s.textos[i]) +
+        (s.solo_protegidas ? " protegidas, de " + esc(s.total[i]) + " terminadas" : " viviendas") + "</title></rect>";
+    }
   });
   const anios = periodo && /(\d{4})\D+(\d{4})/.exec(periodo.texto);
   if (media && media.valor != null && anios) {
     const a0 = +anios[1], a1 = +anios[2], y = sy(media.valor);
-    g += '<line x1="' + (sx(a0) - ancho / 2) + '" x2="' + (sx(a1) + ancho / 2) + '" y1="' + y + '" y2="' + y + '" stroke="' + colorTema("anios_") + '" stroke-width="2"/>' +
-      '<text x="' + (sx(a1) + ancho / 2) + '" y="' + (y - 6) + '" text-anchor="end" font-size="12" font-weight="600" fill="' + TINTA + '">media ' + a0 + "–" + a1 + ": " + esc(media.texto) + "</text>";
+    g += '<line x1="' + (sx(a0) - ancho / 2) + '" x2="' + (sx(a1) + ancho / 2) + '" y1="' + y + '" y2="' + y + '" stroke="' + (deProtegidas ? TINTA : colorTema("anios_")) + '" stroke-width="2"' +
+      (deProtegidas ? ' stroke-dasharray="4 3"' : "") + "/>" +
+      '<text x="' + (sx(a1) + ancho / 2) + '" y="' + (y - 6) + '" text-anchor="end" font-size="12" font-weight="600" fill="' + TINTA + '" stroke="#fff" stroke-width="3" paint-order="stroke">' +
+      (deProtegidas ? "media de protegidas " : "media ") + a0 + "–" + a1 + ": " + esc(media.texto) + "</text>";
   }
   const svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(s.titulo) + '">' + g + "</svg>";
-  const tabla = tablaHtml(["Año", "Viviendas"], s.anios.map((a, i) => [a, esc(s.textos[i])]));
-  return htmlGrafico(s.titulo, svg, tabla, s.notas.concat(media && anios ? ["La línea es la media que usa la ficha para los años de construcción y el ritmo por cada mil viviendas."] : []), s.fuente);
+  const cuadro = (c) => '<svg width="14" height="14" aria-hidden="true"><rect width="14" height="14" fill="' + c + '"/></svg> ';
+  const leyenda = apiladas ? '<div class="leyenda-meses"><span>' + cuadro(VERDE_PROTEGIDAS) + "Protegidas (calificación definitiva)</span><span>" + cuadro(color) + "Libres</span></div>" : "";
+  const tabla = apiladas
+    ? tablaHtml(["Año", "Libres", "Protegidas", "Total"], s.anios.map((a, i) => [a, esc(s.textos_libres[i]), esc(s.textos_protegidas[i]), esc(s.textos[i])]))
+    : s.solo_protegidas ? tablaHtml(["Año", "Protegidas", "Total de terminadas"], s.anios.map((a, i) => [a, esc(s.textos[i]), esc(s.total[i])]))
+    : tablaHtml(["Año", "Viviendas"], s.anios.map((a, i) => [a, esc(s.textos[i])]));
+  const nota = !(media && anios) ? [] : deProtegidas
+    ? ["La línea discontinua es la media de las viviendas protegidas en los mismos años que la media de todas las construidas."]
+    : ["La línea es la media que usa la ficha para los años de construcción y el ritmo por cada mil viviendas."];
+  return htmlGrafico(s.titulo, svg, tabla, s.notas.concat(nota), s.fuente, leyenda);
+}
+
+// Anuncios de temporada (pedido por el usuario el 22 de octubre de 2026): una línea de 0% (todos los anuncios de larga
+// estancia) a 100% (todos de temporada) por área, con el punto de cada periodo y una flecha del primero al segundo;
+// el lugar en color y su comunidad y España en gris
+function htmlTemporada(s) {
+  const titulo = "Anuncios de alquiler de temporada, en % de todos los anuncios";
+  if (!s) return htmlGrafico(titulo, '<p class="sin-grafico">elDiario.es solo cuenta los anuncios de las 52 capitales de provincia, y este lugar no es una de ellas.</p>', null, [], null, "", htmlCita());
+  const W = anchoGrafico(), izq = 52, der = 52, cab = 26, alto = 64;
+  const H = cab + s.filas.length * alto + 6;
+  const sx = (p) => izq + (p / 100) * (W - izq - der);
+  let g = "";
+  // Rejilla y extremos: 0% = todo larga estancia, 100% = todo temporada
+  for (const p of [0, 25, 50, 75, 100]) {
+    g += '<line x1="' + sx(p) + '" x2="' + sx(p) + '" y1="' + (cab - 4) + '" y2="' + (H - 4) + '" stroke="' + REJILLA + '"' + (p % 100 ? ' stroke-dasharray="3 3"' : "") + "/>";
+    if (p % 100) g += '<text x="' + sx(p) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="11" fill="' + TINTA_SUAVE + '">' + p + "%</text>";
+  }
+  // En pantallas estrechas, rótulos cortos para que no se pisen
+  const [r0, r100] = W < 480 ? ["← 0%: larga estancia", "100%: temporada →"] : ["← 0%: todo larga estancia", "100%: todo temporada →"];
+  g += '<text x="' + sx(0) + '" y="14" font-size="12" fill="' + TINTA_SUAVE + '">' + r0 + "</text>" +
+    '<text x="' + sx(100) + '" y="14" text-anchor="end" font-size="12" fill="' + TINTA_SUAVE + '">' + r100 + "</text>";
+  s.filas.forEach((r, i) => {
+    const y0 = cab + i * alto, yl = y0 + 46;
+    const color = r.destacada ? colorTema("anuncios_") : "#8a8880";
+    g += '<text x="' + izq + '" y="' + (y0 + 16) + '" font-size="13" fill="' + TINTA + '"' + (r.destacada ? ' font-weight="700"' : "") + ">" + esc(r.titulo) + "</text>" +
+      '<text x="' + (W - der) + '" y="' + (y0 + 16) + '" text-anchor="end" font-size="13" font-weight="600" fill="' + TINTA + '">' + esc(r.texto_puntos) + "</text>";
+    // La línea entera, con topes en 0% y 100%
+    g += '<line x1="' + sx(0) + '" x2="' + sx(100) + '" y1="' + yl + '" y2="' + yl + '" stroke="' + GRIS + '" stroke-width="2"/>' +
+      [0, 100].map((p) => '<line x1="' + sx(p) + '" x2="' + sx(p) + '" y1="' + (yl - 6) + '" y2="' + (yl + 6) + '" stroke="' + GRIS + '" stroke-width="2"/>').join("");
+    const xa = sx(r.antes), xb = sx(r.despues), sg = xb >= xa ? 1 : -1;
+    // Flecha del primer periodo al segundo, si hay sitio entre los dos puntos
+    if (Math.abs(xb - xa) > 16) {
+      const punta = xb - sg * 7;
+      g += '<line x1="' + (xa + sg * 6) + '" x2="' + (punta - sg * 5) + '" y1="' + yl + '" y2="' + yl + '" stroke="' + color + '" stroke-width="2.5"/>' +
+        '<polygon points="' + punta + "," + yl + " " + (punta - sg * 8) + "," + (yl - 5) + " " + (punta - sg * 8) + "," + (yl + 5) + '" fill="' + color + '"/>';
+    }
+    g += '<circle cx="' + xa + '" cy="' + yl + '" r="5" fill="#fff" stroke="' + color + '" stroke-width="2"><title>' + esc(r.titulo + ", " + s.periodos[0] + ": " + r.texto_antes) + "</title></circle>" +
+      '<circle cx="' + xb + '" cy="' + yl + '" r="6" fill="' + color + '"><title>' + esc(r.titulo + ", " + s.periodos[1] + ": " + r.texto_despues) + "</title></circle>";
+    // Cifras encima de la línea, para que no las tache, y por fuera de los puntos: la menor a la izquierda y la mayor
+    // a la derecha, para que no se pisen
+    const [xi, ti, xd, td] = xa <= xb ? [xa, r.texto_antes, xb, r.texto_despues] : [xb, r.texto_despues, xa, r.texto_antes];
+    // Con un borde blanco, para que tampoco las tache la rejilla
+    const halo = ' stroke="#fff" stroke-width="3" paint-order="stroke"';
+    g += '<text x="' + (xi - 3) + '" y="' + (yl - 10) + '" text-anchor="end" font-size="12" fill="' + TINTA + '"' + halo + ">" + esc(ti) + "</text>" +
+      '<text x="' + (xd + 3) + '" y="' + (yl - 10) + '" font-size="12" font-weight="600" fill="' + TINTA + '"' + halo + ">" + esc(td) + "</text>";
+  });
+  const svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + g + "</svg>";
+  const c = colorTema("anuncios_");
+  const leyenda = '<div class="leyenda-meses"><span><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="#fff" stroke="' + c + '" stroke-width="2"/></svg> ' +
+    esc(s.periodos[0]) + '</span><span><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="' + c + '"/></svg> ' + esc(s.periodos[1]) +
+    "</span><span>A la derecha, el cambio</span></div>";
+  const tabla = tablaHtml(["Área", "Periodo", "Anuncios de larga estancia (media al mes)", "Anuncios de temporada (media al mes)", "% de temporada"],
+    s.filas.flatMap((r) => [
+      [r.enlace ? '<a href="' + r.enlace + '">' + esc(r.titulo) + "</a>" : esc(r.titulo), esc(s.periodos[0]), esc(r.larga_antes), esc(r.temp_antes), esc(r.texto_antes)],
+      ["", esc(s.periodos[1]), esc(r.larga_despues), esc(r.temp_despues), esc(r.texto_despues) + " (" + esc(r.texto_puntos) + ")"]]));
+  return htmlGrafico(titulo, svg, tabla, s.notas, s.fuente, leyenda, htmlCita());
+}
+
+// --- Rangos (prompt 11; decisiones del usuario, 24 de octubre de 2026) ------------------------------------------------
+
+// Una cifra entre las áreas que contiene el lugar (los municipios con precio de una provincia, las provincias de España):
+// cada área es una bola en una línea de la cifra más baja a la más alta, del color de su clase en el mapa y de tamaño
+// según su población; con nombre, las más pobladas y, si hay muchas, la más alta y la más baja. Pieza común: dibuja
+// cualquier cifra que preparar_datos.R dé en `rangos` (ver «Rangos» allí). Al pasar por una bola se marca su área en el
+// mapa, y al pasar por el mapa, su bola (marcarEnRangos). `refs`: líneas discontinuas ({ valor, texto, nombre, color }).
+const anchoTexto = (s) => s.length * 6.4 + 6;   // ancho aproximado de un texto de 12 px
+function svgRango(gr, c, refs, titulo) {
+  const W = anchoGrafico(), izq = 12, der = 12, alto = 15;
+  const n = c.i.length;
+  const pmax = Math.max(...c.i.map((k) => gr.pesos[k]));
+  const rmax = n > 60 ? (estrecha() ? 9 : 12) : (estrecha() ? 12 : 16);
+  const radio = (k) => Math.max(2.5, rmax * Math.sqrt(gr.pesos[k] / pmax));   // el área de la bola, proporcional a la población
+  // Eje: de la más baja a la más alta, con las referencias y, en las subidas, con el 0
+  const vals = c.v.concat(refs.map((r) => r.valor), c.subida ? [0] : []);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const paso = pasoEje(hi - lo || Math.abs(hi) || 1);
+  lo = Math.floor(lo / paso) * paso; hi = Math.ceil(hi / paso) * paso;
+  if (hi - lo < paso) { lo -= paso; hi += paso; }
+  const sx = (x) => izq + ((x - lo) / (hi - lo)) * (W - izq - der);
+  // Rótulos, de izquierda a derecha, en la primera fila libre: encima, debajo, otra encima…
+  const rot = c.rotular.map((k) => { const j = c.i.indexOf(k); return { k, x: sx(c.v[j]), r: radio(k), nombre: gr.nombres[k], cifra: c.t[j] }; })
+    .sort((a, b) => a.x - b.x);
+  const ocupado = [];
+  for (const r of rot) {
+    const w = anchoTexto(r.nombre + " " + r.cifra);
+    r.lx = Math.min(Math.max(r.x, izq + w / 2), W - der - w / 2);
+    const a = r.lx - w / 2 - 4, b = r.lx + w / 2 + 4;
+    r.fila = [0, 1, 2, 3, 4, 5].find((q) => !(ocupado[q] || []).some(([x0, x1]) => a < x1 && b > x0));
+    if (r.fila === undefined) r.fila = 0;
+    (ocupado[r.fila] = ocupado[r.fila] || []).push([a, b]);
+  }
+  const nArriba = Math.max(0, ...rot.filter((r) => r.fila % 2 === 0).map((r) => r.fila / 2 + 1));
+  const nAbajo = Math.max(0, ...rot.filter((r) => r.fila % 2 === 1).map((r) => (r.fila + 1) / 2));
+  const y0 = 18 + nArriba * alto + rmax + 6;   // arriba, sitio para el rótulo de la bola marcada
+  const yArriba = (q) => y0 - rmax - 8 - q * alto, yAbajo = (q) => y0 + rmax + 18 + q * alto;
+  const yEje = y0 + rmax + 10 + nAbajo * alto + 14;
+  const H = yEje + 6;
+  let s = "";
+  const d = paso < 1 ? 1 : 0;
+  for (let x = lo; x <= hi + 1e-9; x += paso) {
+    s += '<line x1="' + sx(x) + '" x2="' + sx(x) + '" y1="' + (y0 - rmax - 2) + '" y2="' + (y0 + rmax + 2) + '" stroke="' + (Math.abs(x) < 1e-9 && lo < 0 ? TINTA_SUAVE : REJILLA) + '"/>' +
+      '<text x="' + sx(x) + '" y="' + yEje + '" text-anchor="middle" font-size="12" fill="' + TINTA_SUAVE + '">' + (c.subida && x > 1e-9 ? "+" : "") + numero(x, d) + esc(c.unidad) + "</text>";
+  }
+  s += '<line x1="' + sx(c.v[0]) + '" x2="' + sx(c.v[n - 1]) + '" y1="' + y0 + '" y2="' + y0 + '" stroke="#d9d7d0" stroke-width="6" stroke-linecap="round"/>';
+  for (const r of refs) s += '<line x1="' + sx(r.valor) + '" x2="' + sx(r.valor) + '" y1="' + (y0 - rmax - 4) + '" y2="' + (y0 + rmax + 4) + '" stroke="' + r.color + '" stroke-width="1.5" stroke-dasharray="4 3"><title>' + esc(r.nombre + ": " + r.texto) + "</title></line>";
+  // Las bolas grandes primero, para que las pequeñas queden encima
+  const orden = c.i.map((k, j) => j).sort((a, b) => radio(c.i[b]) - radio(c.i[a]));
+  for (const j of orden) {
+    const k = c.i[j], cl = c.clases[c.k[j] - 1];
+    s += '<circle class="bola" cx="' + sx(c.v[j]) + '" cy="' + y0 + '" r="' + radio(k) + '" fill="' + (cl ? cl.color : SIN_DATO) +
+      '" fill-opacity="0.9" stroke="rgba(0,0,0,0.4)" stroke-width="0.75" data-codigo="' + gr.codigos[k] + '" data-et="' + esc(gr.nombres[k] + " " + c.t[j]) + '">' +
+      "<title>" + esc(gr.nombres[k] + ": " + c.t[j] + " (" + gr.textos_peso[k] + " habitantes)") + "</title></circle>";
+  }
+  const halo = ' stroke="#fff" stroke-width="3" paint-order="stroke"';
+  for (const r of rot) {
+    const arriba = r.fila % 2 === 0, q = Math.floor(r.fila / 2);
+    const yb = arriba ? yArriba(q) : yAbajo(q);
+    s += '<line x1="' + r.x + '" x2="' + r.lx + '" y1="' + (arriba ? y0 - r.r : y0 + r.r) + '" y2="' + (arriba ? yb + 3 : yb - 11) + '" stroke="' + TINTA_SUAVE + '" stroke-width="0.75"/>' +
+      '<text x="' + r.lx + '" y="' + yb + '" text-anchor="middle" font-size="12" fill="' + TINTA + '"' + halo + ">" + esc(r.nombre) +
+      ' <tspan font-weight="700">' + esc(r.cifra) + "</tspan></text>";
+  }
+  return '<svg class="rango-svg" data-nivel="' + gr.nivel + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + s +
+    '<g class="resaltes" pointer-events="none"></g></svg>';
+}
+
+// El gráfico de una cifra de `rangos`, con su leyenda, su tabla y sus notas; en las subidas, con la del salario y la del IPC
+function htmlRango(f, columna) {
+  const c = f.rangos.cifras[columna], gr = f.rangos.grupos[c.grupo], s = f.salarios;
+  const refs = c.subida && s ? [
+    { valor: s.salario.variacion, texto: s.salario.texto, nombre: "Salario mediano (" + s.ambito + ")", color: "#3a3a38" },
+    { valor: s.ipc.variacion, texto: s.ipc.texto, nombre: "Precios (IPC de " + s.ipc.ambito + ")", color: "#8a8880" }] : [];
+  const presentes = c.clases.filter((x, j) => c.k.indexOf(j + 1) >= 0);
+  const leyenda = '<div class="leyenda-meses">' + presentes.map((x) => '<span><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="' +
+    x.color + '" stroke="rgba(0,0,0,0.4)" stroke-width="0.75"/></svg> ' + esc(x.rotulo) + "</span>").join("") +
+    refs.map((r) => '<span><svg width="14" height="14" aria-hidden="true"><line x1="7" x2="7" y1="0" y2="14" stroke="' + r.color +
+      '" stroke-width="2" stroke-dasharray="3 2"/></svg> ' + esc(r.nombre + ": " + r.texto) + "</span>").join("") + "</div>";
+  const filas = c.i.map((k, j) => j).sort((a, b) => c.v[b] - c.v[a]).map((j) => {
+    const k = c.i[j];
+    return ['<a href="' + direccion(gr.nivel, gr.codigos[k]) + '">' + esc(gr.nombres[k]) + "</a>", esc(c.t[j]), esc(gr.textos_peso[k])];
+  });
+  const tabla = tablaHtml(["Área", "Cifra", "Habitantes"], filas);
+  let notas = c.notas.slice();
+  if (refs.length) notas.push("Líneas discontinuas: la subida del salario mediano y la de los precios, de " + s.anio_inicio + " a " + s.anio_fin + ".", ...notasSalarioIpc(s));
+  notas = notas.filter((x, j) => notas.indexOf(x) === j);
+  // Las notas y la fuente, plegadas: son muchas (pedido por el usuario el 24 de octubre de 2026)
+  const pie = plegado("Cómo leer el gráfico, notas y fuente", '<ul class="notas">' + notas.map((x) => "<li>" + esc(x) + "</li>").join("") +
+    "<li>Fuente: " + esc(c.fuente) + ".</li></ul>");
+  return htmlGrafico(c.titulo, svgRango(gr, c, refs, c.titulo), tabla, [], null, leyenda, pie);
+}
+// La cifra y, debajo, la que va con ella (la subida con el precio de 2024, y al revés)
+function htmlRangos(f, columna) {
+  const c = f.rangos.cifras[columna];
+  return htmlRango(f, columna) + (c.con && f.rangos.cifras[c.con] ? htmlRango(f, c.con) : "");
+}
+
+// Marca un área en todos los gráficos de rangos de la ficha (un anillo y su nombre con su cifra), o quita la marca
+function marcarEnRangos(codigo, encendida) {
+  document.querySelectorAll(".rango-svg").forEach((svg) => {
+    const capa = svg.querySelector(".resaltes");
+    capa.innerHTML = "";
+    const b = encendida && svg.querySelector('circle.bola[data-codigo="' + codigo + '"]');
+    if (!b) return;
+    const x = +b.getAttribute("cx"), y = +b.getAttribute("cy"), r = +b.getAttribute("r");
+    const et = b.getAttribute("data-et"), w = anchoTexto(et), W = svg.viewBox.baseVal.width;
+    capa.innerHTML = '<circle cx="' + x + '" cy="' + y + '" r="' + (r + 3) + '" fill="none" stroke="' + TINTA + '" stroke-width="2"/>' +
+      '<text x="' + Math.min(Math.max(x, w / 2 + 2), W - w / 2 - 2) + '" y="' + Math.max(13, y - r - 7) + '" text-anchor="middle" font-size="12" font-weight="700" fill="' +
+      TINTA + '" stroke="#fff" stroke-width="4" paint-order="stroke">' + esc(et) + "</text>";
+  });
+}
+// Marca un área en el mapa, si está en el mapa que se ve
+function marcarEnMapa(codigo, encendida) {
+  const capa = estado.porCodigo.get(codigo);
+  if (!capa) return;
+  if (encendida) { capa.setStyle({ color: "#000", weight: 3, dashArray: null }); capa.bringToFront(); circulosDelante(); capa.openTooltip(); }
+  else { capa.setStyle(estilo(capa.feature)); capa.closeTooltip(); }
 }
 
 function htmlGraficoVariable(f, v) {
+  // Una cifra que el lugar no tiene: el rango de las áreas que contiene; si la tiene y hay rango, va debajo
+  const x = estado.cifras.get(v.columna);
+  const rango = f.rangos && f.rangos.cifras[v.columna];
+  if (rango && x && x.rango) return htmlRangos(f, v.columna);
+  return graficoPropio(f, v) + (rango ? htmlRangos(f, v.columna) : "");
+}
+function graficoPropio(f, v) {
   const s = f.series || {};
   const sin = (titulo, por) => htmlGrafico(titulo, '<p class="sin-grafico">' + esc(por) + "</p>", null, [], null);
   const sinTur = () => sin("Viviendas turísticas en el tiempo", "El INE no da viviendas turísticas de esta área en ninguna medición.");
@@ -623,19 +1144,25 @@ function htmlGraficoVariable(f, v) {
     case "alquiler_mes": return s.alquiler ? htmlSerieAlquiler(s.alquiler, "mes") : sinAlq();
     case "variacion": return htmlVariacion(f, v.columna);
     case "construccion": return htmlConstruccion(s.construccion);
+    case "construccion_protegidas": return htmlConstruccion(s.construccion, v.columna);
     case "comparar": return htmlComparar(f, v.columna);
+    case "temporada": return htmlTemporada(s.temporada);
+    case "venta_m2": return htmlVariacionVenta(f, "m2");
+    case "venta_medio": return htmlVariacionVenta(f, "medio");
+    case "compras": return htmlCompras(f, v.columna);
     default: return "";
   }
 }
 
 // --- Ficha -----------------------------------------------------------------------------------------------
 
+// Sin la tabla de todo el nivel en ningún nivel (decisión del usuario: el 21 de octubre de 2026, en distritos y
+// secciones; el 23 de octubre de 2026, en todos). El archivo se sigue escribiendo y comprobando.
 function htmlDescargas(f) {
   return '<section class="descargas"><h2>Descargar</h2>' +
     '<button type="button" id="descargar-lugar">Datos de este lugar (CSV)</button>' +
-    '<a class="boton secundario" href="' + f.descarga.tabla_nivel + '" download>Todas las áreas de este nivel (CSV)</a>' +
     "<p>Las cifras van sin redondear, como en las tablas del proyecto, y cada una con sus avisos. " +
-    '<a href="datos/descargas/descripcion_datos_' + f.nivel + '.txt">Qué es cada columna</a>.' +
+    '<a href="' + DATOS + 'descargas/descripcion_datos_' + f.nivel + '.txt">Qué es cada columna</a>.' +
     " No llevan las cifras calculadas para esta página (lo dice el «qué es» de cada una) ni las series de los gráficos." +
     (f.descarga.nota ? " " + esc(f.descarga.nota) : "") + "</p></section>";
 }
@@ -678,12 +1205,17 @@ function pintarFicha() {
   let h = "";
   if (f.sin_datos) h += '<div class="aviso sin-datos">' + esc(f.sin_datos) + "</div>";
   const disp = variablesDisponibles(), v = variableActual();
+  const enCompra = tema.id === "compra";
   if (!v) {
     h += '<p class="sin-tema">Este tema no tiene cifras para ' + NOMBRE_NIVEL[f.nivel] + ".</p>";
+    if (enCompra) h += htmlNotaCompra(f);
   } else {
     h += htmlTarjeta(f, v, true);
+    if (enCompra) h += htmlNotaCompra(f);
     h += htmlGraficoVariable(f, v);
+    if (enCompra) h += htmlExtrasCompra(f);
     if (tema.id === "vacias" && hayVacias()) h += htmlInfoVacias(estado.infoVacias);
+    if (tema.id === "turisticas" && estado.temas.info_turisticas) h += htmlInfoTuristicas(estado.infoTuristicas);
     const otras = disp.filter((x) => x.columna !== v.columna);
     if (tema.id === "resumen") {
       h += '<h2 class="sub">De un vistazo</h2>' + htmlDestacadas(f);
@@ -714,6 +1246,15 @@ function conectarFicha(zona, f, col) {
   zona.querySelectorAll("[data-ir-vacias]").forEach((b) => b.addEventListener("click", irAInfoVacias));
   const info = $("info-vacias");
   if (info) info.addEventListener("toggle", () => { estado.infoVacias = info.open; });
+  const infoTur = $("info-turisticas");
+  if (infoTur) infoTur.addEventListener("toggle", () => { estado.infoTuristicas = infoTur.open; });
+  // Gráficos de rangos: al pasar por una bola se marca en el mapa y en los demás gráficos; al pulsarla, su ficha
+  zona.querySelectorAll(".rango-svg circle.bola").forEach((b) => {
+    const codigo = b.getAttribute("data-codigo");
+    b.addEventListener("mouseenter", () => { marcarEnRangos(codigo, true); marcarEnMapa(codigo, true); });
+    b.addEventListener("mouseleave", () => { marcarEnRangos(codigo, false); marcarEnMapa(codigo, false); });
+    b.addEventListener("click", () => { location.hash = direccion(b.closest(".rango-svg").getAttribute("data-nivel"), codigo); });
+  });
   zona.querySelectorAll("[data-elegir]").forEach((b) => b.addEventListener("click", () => {
     elegirVariable(b.dataset.elegir);
     $("cabeza").scrollIntoView({ behavior: "smooth", block: "start" });
