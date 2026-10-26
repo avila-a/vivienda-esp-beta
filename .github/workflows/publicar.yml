@@ -46,7 +46,7 @@ jobs:
       - name: Montar el sitio y comprobar que el zip está completo
         run: |
           mkdir _site
-          cp index.html app.js csv.js estilo.css entrada.js entrada.css _site/
+          cp index.html app.js graficos.js csv.js estilo.css entrada.js entrada.css _site/
           cp -r lib _site/
           # Cada script y hoja de estilo que pide index.html tiene que estar en el sitio
           for f in $(grep -oE '(src|href)="[^"#:]+\.(js|css)"' index.html | sed -E 's/^(src|href)="//; s/"$//'); do
