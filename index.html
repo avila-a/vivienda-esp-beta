@@ -11,6 +11,7 @@
 <script src="lib/leaflet.js" defer></script>
 <script src="csv.js" defer></script>
 <script src="app.js" defer></script>
+<script src="graficos.js" defer></script>
 </head>
 <body>
 <section id="portada" class="portada" aria-label="Presentación" hidden>
@@ -43,7 +44,10 @@
            role="combobox" aria-expanded="false" aria-controls="resultados" aria-autocomplete="list">
     <ul id="resultados" role="listbox" hidden></ul>
   </div>
-  <a class="enlace-fuentes" href="#/fuentes">Fuentes</a>
+  <nav class="enlaces-cabecera" aria-label="Páginas">
+    <a class="enlace-fuentes" href="#/fuentes">Fuentes</a>
+    <a class="enlace-fuentes" href="#/proyecto">Sobre el proyecto</a>
+  </nav>
 </header>
 <nav id="pestanas" class="pestanas" role="tablist" aria-label="Temas"></nav>
 
@@ -55,15 +59,25 @@
   <section class="zona-mapa" aria-label="Mapa">
     <div class="controles-mapa">
       <div id="capas" class="capas" hidden></div>
+      <div id="vistas" class="vistas capas" hidden></div>
     </div>
     <div id="mapa"></div>
     <div id="leyenda" class="leyenda"></div>
+    <div id="graficos-lugar" class="graficos-lugar" hidden></div>
   </section>
 
   <section id="ficha" class="zona-ficha" aria-live="polite"></section>
 </main>
 
 <a id="ir-ficha" class="ir-ficha" href="#ficha" hidden>Ver la ficha</a>
+<!-- Ventana de «Fuentes» y «Sobre el proyecto» (verFuentes y verProyecto en app.js) -->
+<dialog id="ventana" class="ventana" aria-labelledby="ventana-titulo">
+  <div class="ventana-barra">
+    <h1 id="ventana-titulo"></h1>
+    <button type="button" id="cerrar-ventana" class="cerrar-ventana" aria-label="Cerrar">×</button>
+  </div>
+  <div id="ventana-cuerpo" class="ventana-cuerpo"></div>
+</dialog>
 <noscript><p class="aviso-prueba">Esta página necesita JavaScript para enseñar el mapa y las fichas. Las tablas se pueden descargar en la carpeta datos/descargas/.</p></noscript>
 </body>
 </html>

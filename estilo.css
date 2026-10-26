@@ -49,7 +49,7 @@ a { color: #1d5fad; }
 .aviso-prueba { margin: 0; padding: 6px 16px; font-size: 14px; background: var(--fondo-suave); color: var(--tinta-suave); }
 
 /* Mapa */
-.zona-mapa { padding: 0 16px; }
+.zona-mapa { padding: 0 16px; scroll-margin-top: calc(var(--cabecera) + var(--pestanas)); }   /* al subir a ella, no bajo la cabecera fija */
 .controles-mapa { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 8px 0; }
 .selector { display: flex; gap: 8px; align-items: center; font-size: 14px; flex-wrap: wrap; }
 .selector select { font: inherit; padding: 4px 8px; max-width: 100%; min-width: 0; }
@@ -64,6 +64,19 @@ html, body { overflow-x: hidden; }
   background: var(--fondo); border-radius: 6px; cursor: pointer;
 }
 .capas button[aria-pressed="true"] { background: var(--tinta); color: #fff; border-color: var(--tinta); }
+/* «Gráficos de <lugar>» (graficos.js), al lado de los botones de mapa: con los gráficos, se ocultan el mapa y su leyenda */
+.vistas { flex-wrap: wrap; margin-left: auto; }   /* a la derecha de la fila (pedido por el usuario) */
+.vistas[hidden], .graficos-lugar[hidden] { display: none; }
+.zona-mapa.con-graficos #mapa, .zona-mapa.con-graficos #leyenda { display: none; }
+/* Con los gráficos a la vista, ningún botón de mapa sale marcado: al pulsar uno se vuelve al mapa */
+.zona-mapa.con-graficos #capas button[aria-pressed="true"] { background: var(--fondo); color: inherit; border-color: var(--borde); }
+.graficos-lugar .subtitulo { font-size: 13px; color: var(--tinta-suave); margin: 0 0 4px; }
+.graficos-lugar .leyenda-series { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; margin: 4px 0; }
+.graficos-lugar .leyenda-series > span { display: inline-flex; align-items: center; gap: 6px; }
+.grupos-svg rect.trozo { cursor: pointer; }
+.grupos-svg rect.trozo:hover, .grupos-svg rect.trozo.marcado { stroke: var(--tinta); stroke-width: 1.5; }
+.info-trozo { font-size: 14px; min-height: 2.6em; margin: 4px 0; }
+.notas-grafico summary { font-size: 13px; cursor: pointer; }
 .boton-colores {
   font: inherit; font-size: 13px; padding: 4px 10px; background: var(--fondo); color: var(--tinta);
   cursor: pointer; border-radius: 6px;
@@ -92,8 +105,13 @@ html, body { overflow-x: hidden; }
 .casilla { background: var(--fondo-suave); border-radius: 8px; }
 .destacada { padding: 10px 12px; }
 .destacada.junto { border-top: 1px dotted var(--borde); padding-top: 8px; }
-.destacada.junto .numero { font-size: 20px; }
 .destacada .numero { font-size: 26px; font-weight: 700; line-height: 1.1; }
+/* Columnas de casillas (colocarCasillas() en app.js): cada casilla a la columna más corta, sin huecos entre filas */
+.destacadas.en-columnas { display: flex; align-items: flex-start; }
+.destacadas .columna { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* La cifra que va junto a otra, en una frase: «Por cada 100 viviendas alquiladas hay 66,5 vacías» */
+.destacada .frase { font-size: 14px; }
+.destacada .frase .numero { font-size: 20px; }
 .destacada .etiqueta { font-size: 14px; }
 .destacada .fecha { font-size: 12px; color: var(--tinta-suave); margin-top: 2px; }
 
@@ -221,6 +239,9 @@ button.tarjeta:hover { border-color: var(--borde); background: var(--fondo); }
   .zona-mapa { grid-column: 2; grid-row: 1 / span 2; position: sticky; top: calc(var(--cabecera) + var(--pestanas)); align-self: start;
     height: calc(100vh - var(--cabecera) - var(--pestanas)); display: flex; flex-direction: column; overflow-y: auto; }
   #mapa { flex: 1; height: auto; min-height: 380px; }
+  /* Con los gráficos, la columna crece con la página en vez de ser una ventana con su propio desplazamiento
+     (pedido por el usuario, 25 de octubre de 2026) */
+  .zona-mapa.con-graficos { position: static; height: auto; overflow: visible; }
   .ir-ficha { display: none; }
 }
 @media (max-width: 520px) {
@@ -257,3 +278,63 @@ button.tarjeta:hover { border-color: var(--borde); background: var(--fondo); }
   .info-vacias td:nth-child(1)::before { content: "Podría contar de más"; }
   .info-vacias td:nth-child(2)::before { content: "Podría contar de menos"; }
 }
+
+/* Enlaces de la cabecera: Fuentes y Sobre el proyecto */
+.enlaces-cabecera { display: flex; gap: 4px; margin-left: auto; font-size: 15px; }
+.enlaces-cabecera a { padding: 6px 10px; border-radius: 6px; color: var(--tinta-suave); text-decoration: none; }
+.enlaces-cabecera a:hover { color: var(--tinta); background: var(--fondo-suave); }
+.enlaces-cabecera a[aria-current="page"] { color: var(--tinta); font-weight: 600; background: var(--fondo-suave); }
+@media (max-width: 520px) { .enlaces-cabecera { gap: 0; font-size: 14px; } .enlaces-cabecera a { padding: 6px; } .cabecera { gap: 8px; } }
+
+/* Ventana de «Fuentes» y «Sobre el proyecto», encima de la ficha; en el móvil, a pantalla completa */
+.ventana { width: min(1100px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 0; border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.25); color: var(--tinta); background: var(--fondo); }
+.ventana[open] { display: flex; flex-direction: column; }
+.ventana::backdrop { background: rgba(34, 33, 31, .45); }
+.ventana-barra { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px 12px 24px;
+  border-bottom: 1px solid var(--borde); }
+.ventana-barra h1 { font-size: 22px; margin: 0; }
+.cerrar-ventana { flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--fondo-suave);
+  font: 26px/1 system-ui, sans-serif; color: var(--tinta); cursor: pointer; }
+.cerrar-ventana:hover { background: var(--borde); }
+.ventana-cuerpo { overflow-y: auto; padding: 8px 24px 24px; }
+@media (max-width: 600px) {
+  .ventana { width: 100vw; max-width: 100vw; height: 100%; max-height: 100%; margin: 0; border-radius: 0; }
+  .ventana-barra { padding-left: 16px; }
+  .ventana-cuerpo { padding: 8px 16px 24px; }
+}
+
+/* «Sobre el proyecto»: texto a la izquierda y comentarios a la derecha */
+.proyecto-texto h3 { font-size: 18px; margin: 16px 0 4px; }
+.proyecto-comentar { border: 1px solid var(--borde); border-radius: 8px; background: var(--fondo-suave); padding: 4px 16px 8px; margin: 16px 0; }
+.proyecto-comentar h2 { font-size: 18px; margin: 12px 0 4px; }
+.proyecto-comentar p { font-size: 15px; }
+.boton-formulario { display: inline-block; padding: 8px 14px; border-radius: 8px; background: var(--tinta); color: #fff; text-decoration: none; font-weight: 600; }
+.boton-formulario:hover { background: #000; }
+.aviso-formulario { margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--borde); }
+.aviso-formulario p { font-size: 12px; line-height: 1.4; color: var(--tinta-suave); }
+.proyecto-resueltos { border-top: 1px solid var(--borde); padding-top: 8px; }
+.proyecto-resueltos h2 { font-size: 18px; margin: 8px 0; }
+.lista-resueltos { list-style: none; padding: 0; margin: 0; }
+.lista-resueltos li { border-bottom: 1px dotted var(--borde); padding: 8px 0; }
+.lista-resueltos p { margin: 4px 0; }
+.lista-resueltos blockquote { margin: 4px 0; padding-left: 12px; border-left: 3px solid var(--borde); }
+@media (min-width: 900px) {
+  .proyecto-pagina { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); gap: 0 40px; align-items: start; }
+  .proyecto-texto { grid-column: 1; grid-row: 1; }
+  .proyecto-comentar { grid-column: 2; grid-row: 1; }
+  .proyecto-resueltos { grid-column: 1 / -1; }
+}
+.grafico .notas .boton-enlace { font-size: inherit; }
+/* Enlace de la ficha a los gráficos del lugar (graficos.js): una tarjeta pequeña con icono, título y flecha */
+.enlaces-graficos { display: grid; gap: 8px; margin: 4px 0 16px; }
+.tarjeta-grafico {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; text-align: left; cursor: pointer;
+  font: inherit; color: var(--tinta); background: var(--fondo-suave); border: 1px solid var(--borde); border-radius: 8px;
+}
+.tarjeta-grafico:hover, .tarjeta-grafico:focus-visible { border-color: var(--tinta); }
+.tarjeta-grafico .icono-barras { flex: none; width: 22px; height: 18px; fill: var(--tinta-suave); }
+.tarjeta-grafico .texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tarjeta-grafico .texto strong { font-size: 15px; }
+.tarjeta-grafico .texto span { font-size: 13px; color: var(--tinta-suave); }
+.tarjeta-grafico .flecha { margin-left: auto; font-size: 18px; color: var(--tinta-suave); }

@@ -25,8 +25,8 @@ const NOMBRE_CAPA = { distritos: "Distritos", secciones: "Secciones censales", m
 const SOLO_COMPRA = /^(zonas_|municipios_venta$)/;
 const SIN_DATO = "#d6d6d6";
 // Color de cada tema, el de colores_proyecto (0_funciones.R): para la barra del lugar en las comparaciones
-const COLOR_TEMA = [[/^construidas_protegidas/, "#1baf7a"], [/^turistic/, "#e87ba4"], [/^(alquil|anuncio)/, "#eb6834"], [/^no_principales/, "#eda100"],
-  [/^(vacia|menos_de|uno_a)/, "#6250d6"], [/^(construid|anios_)/, "#3a3a38"], [/^(precio_venta|compras)/, "#2a78d6"]];
+const COLOR_TEMA = [[/^construidas_protegidas/, "#1baf7a"], [/^turistic/, "#e87ba4"], [/^(alquil|anuncio)/, "#eb6834"], [/^(no_principales|menos_de|uno_a)/, "#eda100"],
+  [/^vacia/, "#6250d6"], [/^(construid|anios_)/, "#3a3a38"], [/^(precio_venta|compras)/, "#2a78d6"]];
 const AZUL_CLARO = "#9cc3ef";   // la otra medida del precio de venta, y la otra línea de las compras
 const GRIS = "#c9c7c0";
 const TINTA = "#22211f", TINTA_SUAVE = "#5c5a55", REJILLA = "#e4e2dc";
@@ -364,6 +364,8 @@ async function verGrupo(grupo, encuadrarSiempre) {
 }
 
 function encuadrar(nuevo) {
+  // Con los gráficos del lugar en su sitio, el mapa no tiene tamaño: se encuadra al volver a él (graficos.js)
+  if (!$("mapa").offsetParent) { estado.encuadrarPendiente = true; return; }
   estado.mapa.invalidateSize({ pan: false });   // el tamaño real del mapa, no el de cuando se creó
   const elegidas = [];
   estado.porCodigo.forEach((capa) => { if (esElegida(capa.feature.properties)) elegidas.push(capa); });
@@ -426,14 +428,17 @@ function pintarLeyenda() {
 function htmlTamanoCapitales(cap, nivel) {
   const pobs = cap.ejemplos;
   const rs = pobs.map((p) => radioCapital(p, cap.escala));
-  const W = 260, H = 2 * R_MAX + 22;
-  let x = 4, s = "";
+  const H = 2 * R_MAX + 22;
+  let x = 2, s = "";
   pobs.forEach((p, i) => {
-    const cx = x + rs[i];
-    s += '<circle cx="' + cx + '" cy="' + (R_MAX + 2 + R_MAX - rs[i]) + '" r="' + rs[i] + '" fill="none" stroke="' + TINTA_SUAVE + '"/>' +
-      '<text x="' + cx + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + TINTA_SUAVE + '">' + esc(numero(Math.round(p), 0)) + "</text>";
-    x = cx + rs[i] + 40;
+    // Cada círculo con su número debajo, centrados: el hueco es el más ancho de los dos
+    const et = numero(Math.round(p), 0), mitad = Math.max(rs[i], anchoTexto(et) / 2);
+    const cx = x + mitad;
+    s += '<circle cx="' + cx + '" cy="' + (2 * R_MAX + 2 - rs[i]) + '" r="' + rs[i] + '" fill="none" stroke="' + TINTA_SUAVE + '"/>' +
+      '<text x="' + cx + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + TINTA_SUAVE + '">' + esc(et) + "</text>";
+    x = cx + mitad + 18;
   });
+  const W = Math.ceil(x);
   const areas = nivel === "municipio" ? "Los municipios, en gris" : "Las provincias, en gris";
   return '<p>Cada círculo es una capital de provincia, con el color de su cifra. ' + areas + ": elDiario.es solo cuenta los anuncios de las capitales.</p>" +
     '<p>El tamaño del círculo crece con la población de la capital (habitantes: la capital menos poblada, la mediana de las capitales y la más poblada):</p>' +
@@ -490,11 +495,12 @@ function marcas(f, avisos) {
     avisos.map((i) => i + 1).join(", ") + "</span>";
 }
 
-// Una destacada con `antes` se lee «<antes> <cifra> <etiqueta>» y va bajo la anterior, en su misma casilla
+// Una destacada con `antes` se lee «<antes> <cifra> <etiqueta>», en una sola frase, y va bajo la anterior, en su misma casilla
 function htmlDestacada(f, d) {
   let h = '<div class="destacada' + (d.antes ? " junto" : "") + '" data-columna="' + d.columna + '">' +
-    (d.antes ? '<div class="etiqueta">' + esc(d.antes) + "</div>" : "") + '<div class="numero">' + esc(d.texto) + "</div>" +
-    '<div class="etiqueta">' + esc(d.etiqueta) + "</div>" + (d.fecha ? '<div class="fecha">' + esc(d.fecha) + "</div>" : "");
+    (d.antes ? '<div class="frase">' + esc(d.antes) + ' <span class="numero">' + esc(d.texto) + "</span> " + esc(d.etiqueta) + "</div>"
+      : '<div class="numero">' + esc(d.texto) + '</div><div class="etiqueta">' + esc(d.etiqueta) + "</div>") +
+    (d.fecha ? '<div class="fecha">' + esc(d.fecha) + "</div>" : "");
   if (d.avisos.length) h += '<div class="aviso"><ul>' + d.avisos.map((i) => "<li>⚠ " + esc(f.avisos[i]) + "</li>").join("") + "</ul></div>";
   return h + "</div>";
 }
@@ -504,6 +510,32 @@ function htmlDestacadas(f) {
     if (d.antes && casillas.length) casillas[casillas.length - 1].push(d); else casillas.push([d]);
   }
   return '<div class="destacadas">' + casillas.map((c) => '<div class="casilla">' + c.map((d) => htmlDestacada(f, d)).join("") + "</div>").join("") + "</div>";
+}
+// Las casillas, en columnas: cada una, en orden, a la columna más corta. En una cuadrícula cada fila es tan alta como su
+// casilla más alta, y una casilla con varias cifras o con aviso dejaba un hueco al lado. Se reparten otra vez si cambia
+// el número de columnas (170 px como mínimo cada una, como antes la cuadrícula).
+function colocarCasillas(zona) {
+  if (estado.obsCasillas) estado.obsCasillas.disconnect();
+  const caja = zona.querySelector(".destacadas");
+  if (!caja) return;
+  const casillas = Array.from(caja.querySelectorAll(".casilla"));
+  let n = 0;
+  const repartir = () => {
+    const nuevo = Math.max(1, Math.floor((caja.clientWidth + 8) / (170 + 8)));
+    if (nuevo === n) return;
+    n = nuevo;
+    caja.classList.add("en-columnas");
+    caja.textContent = "";
+    const columnas = [];
+    for (let i = 0; i < n; i++) {
+      const c = caja.appendChild(document.createElement("div"));
+      c.className = "columna";
+      columnas.push(c);
+    }
+    for (const c of casillas) columnas.reduce((a, b) => (b.offsetHeight < a.offsetHeight ? b : a)).appendChild(c);
+  };
+  repartir();
+  if (window.ResizeObserver) (estado.obsCasillas = new ResizeObserver(repartir)).observe(caja);
 }
 
 // Tarjeta de una variable del tema: la cifra del lugar, qué es, la fecha y sus avisos. La elegida, grande.
@@ -1013,7 +1045,7 @@ function htmlTemporada(s) {
 // mapa, y al pasar por el mapa, su bola (marcarEnRangos). `refs`: líneas discontinuas ({ valor, texto, nombre, color }).
 const anchoTexto = (s) => s.length * 6.4 + 6;   // ancho aproximado de un texto de 12 px
 function svgRango(gr, c, refs, titulo) {
-  const W = anchoGrafico(), izq = 12, der = 12, alto = 15;
+  const W = anchoGrafico(), alto = 15;
   const n = c.i.length;
   const pmax = Math.max(...c.i.map((k) => gr.pesos[k]));
   const rmax = n > 60 ? (estrecha() ? 9 : 12) : (estrecha() ? 12 : 16);
@@ -1024,6 +1056,11 @@ function svgRango(gr, c, refs, titulo) {
   const paso = pasoEje(hi - lo || Math.abs(hi) || 1);
   lo = Math.floor(lo / paso) * paso; hi = Math.ceil(hi / paso) * paso;
   if (hi - lo < paso) { lo -= paso; hi += paso; }
+  // Rótulos del eje, centrados en su raya; a los lados, sitio para la mitad del primero y del último, que si no se cortan
+  const d = paso < 1 ? 1 : 0;
+  const marcasEje = [];
+  for (let x = lo; x <= hi + 1e-9; x += paso) marcasEje.push([x, (c.subida && x > 1e-9 ? "+" : "") + numero(x, d) + c.unidad]);
+  const izq = Math.max(12, anchoTexto(marcasEje[0][1]) / 2), der = Math.max(12, anchoTexto(marcasEje[marcasEje.length - 1][1]) / 2);
   const sx = (x) => izq + ((x - lo) / (hi - lo)) * (W - izq - der);
   // Rótulos, de izquierda a derecha, en la primera fila libre: encima, debajo, otra encima…
   const rot = c.rotular.map((k) => { const j = c.i.indexOf(k); return { k, x: sx(c.v[j]), r: radio(k), nombre: gr.nombres[k], cifra: c.t[j] }; })
@@ -1044,10 +1081,9 @@ function svgRango(gr, c, refs, titulo) {
   const yEje = y0 + rmax + 10 + nAbajo * alto + 14;
   const H = yEje + 6;
   let s = "";
-  const d = paso < 1 ? 1 : 0;
-  for (let x = lo; x <= hi + 1e-9; x += paso) {
+  for (const [x, rotulo] of marcasEje) {
     s += '<line x1="' + sx(x) + '" x2="' + sx(x) + '" y1="' + (y0 - rmax - 2) + '" y2="' + (y0 + rmax + 2) + '" stroke="' + (Math.abs(x) < 1e-9 && lo < 0 ? TINTA_SUAVE : REJILLA) + '"/>' +
-      '<text x="' + sx(x) + '" y="' + yEje + '" text-anchor="middle" font-size="12" fill="' + TINTA_SUAVE + '">' + (c.subida && x > 1e-9 ? "+" : "") + numero(x, d) + esc(c.unidad) + "</text>";
+      '<text x="' + sx(x) + '" y="' + yEje + '" text-anchor="middle" font-size="12" fill="' + TINTA_SUAVE + '">' + esc(rotulo) + "</text>";
   }
   s += '<line x1="' + sx(c.v[0]) + '" x2="' + sx(c.v[n - 1]) + '" y1="' + y0 + '" y2="' + y0 + '" stroke="#d9d7d0" stroke-width="6" stroke-linecap="round"/>';
   for (const r of refs) s += '<line x1="' + sx(r.valor) + '" x2="' + sx(r.valor) + '" y1="' + (y0 - rmax - 4) + '" y2="' + (y0 + rmax + 4) + '" stroke="' + r.color + '" stroke-width="1.5" stroke-dasharray="4 3"><title>' + esc(r.nombre + ": " + r.texto) + "</title></line>";
@@ -1235,6 +1271,9 @@ function pintarFicha() {
   zona.innerHTML = h;
   performance.measure("pintar_ficha", { start: antes });
   conectarFicha(zona, f, col);
+  colocarCasillas(zona);
+  // botón «Gráficos de <lugar>», si el lugar tiene gráficos en esta pestaña (graficos.js)
+  if (window.pintarGraficosLugar) pintarGraficosLugar(f, tema);
 }
 
 function conectarFicha(zona, f, col) {
@@ -1311,7 +1350,6 @@ async function verFicha(nivel, codigo) {
 
 async function verFuentes() {
   const d = await cargar("fuentes.json");
-  $("cabeza").innerHTML = '<p class="migas"><a href="#/">España</a></p><h1>Fuentes y fechas</h1>';
   let h = '<div class="fuentes-pagina">' +
     "<p>Las cifras salen de las tablas por nivel del proyecto. Algunas las calcula esta página con columnas de esas tablas: lo dice el «qué es» de cada una; los gráficos usan además las series de las que salen las tablas, el salario mediano y el IPC. Cada bloque de la ficha dice su fuente y su fecha; aquí están todas juntas, con los niveles en que se usa cada una.</p>";
   for (const b of d.bloques) {
@@ -1330,8 +1368,107 @@ async function verFuentes() {
       '<p><a rel="license" href="' + esc(d.licencia.enlace.url) + '">' + esc(d.licencia.enlace.texto) + "</a></p></section>";
   }
   h += "</div>";
-  $("ficha").innerHTML = h;
-  document.title = "Fuentes · Vivienda en España";
+  abrirVentana("Fuentes y fechas", h);
+}
+
+// --- Ventana de «Fuentes» y «Sobre el proyecto» -------------------------------------------------------------------
+
+// Se abre encima de la ficha, que no cambia. Al cerrarla (botón, Esc o fuera de la ventana) se vuelve atrás en el
+// historial tantas veces como páginas de la ventana se han abierto; si se entró directamente, a la ficha de detrás.
+function abrirVentana(titulo, html) {
+  const v = $("ventana");
+  $("ventana-titulo").textContent = titulo;
+  $("ventana-cuerpo").innerHTML = html;
+  $("ventana-cuerpo").scrollTop = 0;
+  if (!v.open) { estado.tituloFicha = document.title; v.showModal(); }
+  document.title = titulo + " · Vivienda en España";
+}
+
+function iniciarVentana() {
+  const v = $("ventana");
+  $("cerrar-ventana").addEventListener("click", () => v.close());
+  v.addEventListener("click", (ev) => { if (ev.target === v) v.close(); });   // fuera del recuadro
+  v.addEventListener("close", () => {
+    if (!esRutaVentana()) return;   // ya se ha ido a otra dirección
+    const pasos = estado.pasosVentana;
+    estado.pasosVentana = 0;
+    if (pasos > 0) { history.go(-pasos); return; }
+    estado.deVentana = false;
+    actualizarDireccion();
+    document.title = estado.tituloFicha;
+    document.querySelectorAll(".enlaces-cabecera a").forEach((a) => a.removeAttribute("aria-current"));
+  });
+}
+
+const esRutaVentana = () => /^#\/(fuentes|proyecto)\b/.test(location.hash);
+
+// --- Página «Sobre el proyecto»: proyecto personal y comentarios (comentarios.md) --------------------------------
+
+// Textos y enlaces de proyecto.json. El formulario de Google se abre en otra ventana, solo al pulsar el botón (sin cookies de Google
+// hasta entonces); la lista de resueltos sale de una hoja pública que escribe una persona: siempre con textContent.
+async function verProyecto() {
+  const d = await cargar("proyecto.json");
+  abrirVentana("Sobre el proyecto", '<div class="proyecto-pagina">' +
+    '<div class="proyecto-texto">' + d.texto + "</div>" +
+    '<aside class="proyecto-comentar"><h2>Hacer un comentario</h2>' + d.intro_comentarios +
+      '<p><a class="boton-formulario" href="' + esc(d.formulario.ver) + '" target="_blank" rel="noopener">Abrir el formulario (se abre en Google)</a></p>' +
+      '<div class="aviso-formulario">' + d.aviso_comentarios + "</div></aside>" +
+    '<section class="proyecto-resueltos"><h2>Comentarios y dudas resueltos</h2><div id="resueltos"></div></section></div>');
+  pintarResueltos(d.hoja_resueltos);
+}
+
+// Lector de CSV sencillo (comillas dobles, comas y saltos de línea dentro de las comillas)
+function leerCsv(texto) {
+  const filas = [];
+  let fila = [], campo = "", comillas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+    if (comillas) {
+      if (c === '"' && texto[i + 1] === '"') { campo += '"'; i++; }
+      else if (c === '"') comillas = false;
+      else campo += c;
+    } else if (c === '"') comillas = true;
+    else if (c === ",") { fila.push(campo); campo = ""; }
+    else if (c === "\n") { fila.push(campo.replace(/\r$/, "")); filas.push(fila); fila = []; campo = ""; }
+    else campo += c;
+  }
+  if (campo || fila.length) { fila.push(campo); filas.push(fila); }
+  return filas;
+}
+
+// Columnas de la hoja, por posición: fecha, tipo, lugar, comentario, respuesta, fecha de la respuesta. La última fila
+// de la hoja va primero.
+async function pintarResueltos(url) {
+  const caja = $("resueltos");
+  const mensaje = (t) => { const p = document.createElement("p"); p.className = "sin-tema"; p.textContent = t; caja.replaceChildren(p); };
+  if (!url) { mensaje("Todavía no hay ninguno."); return; }
+  let filas;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.status);
+    filas = leerCsv(await r.text()).slice(1).filter((f) => f.some((x) => x.trim()));
+  } catch (e) {
+    mensaje("No se ha podido leer la lista de comentarios. El formulario sigue funcionando.");
+    return;
+  }
+  if (!filas.length) { mensaje("Todavía no hay ninguno."); return; }
+  const lista = document.createElement("ul");
+  lista.className = "lista-resueltos";
+  for (const [fecha, tipo, lugar, comentario, respuesta, fechaRespuesta] of filas.reverse()) {
+    const li = document.createElement("li");
+    const parte = (etiqueta, clase, texto) => {
+      if (!texto) return;
+      const p = document.createElement(etiqueta);
+      p.className = clase;
+      p.textContent = texto;
+      li.appendChild(p);
+    };
+    parte("p", "fuente", [fecha, tipo, lugar].filter(Boolean).join(" · "));
+    parte("blockquote", "comentario", comentario);
+    parte("p", "respuesta", respuesta ? "Respuesta" + (fechaRespuesta ? " (" + fechaRespuesta + ")" : "") + ": " + respuesta : "");
+    lista.appendChild(li);
+  }
+  caja.replaceChildren(lista);
 }
 
 // --- Buscador --------------------------------------------------------------------------------------------
@@ -1406,7 +1543,23 @@ function seguirRuta() {
   performance.clearMarks(); performance.clearMeasures(); performance.mark("ruta");
   const [camino, consulta] = location.hash.replace(/^#\/?/, "").split("?");
   const partes = camino.split("/");
-  if (partes[0] === "fuentes") { $("pestanas").innerHTML = ""; return verFuentes(); }
+  document.querySelectorAll(".enlaces-cabecera a").forEach((a) => {
+    if (a.getAttribute("href") === "#/" + partes[0]) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+  // «Fuentes» y «Sobre el proyecto», en la ventana, con la ficha detrás (la de España si se entra directamente)
+  const ventana = { fuentes: verFuentes, proyecto: verProyecto }[partes[0]];
+  if (ventana) {
+    estado.deVentana = true;
+    if (estado.ficha) estado.pasosVentana = (estado.pasosVentana || 0) + 1;
+    return (estado.ficha ? Promise.resolve() : verFicha("nacional", "00")).then(ventana);
+  }
+  estado.pasosVentana = 0;
+  if ($("ventana").open) $("ventana").close();
+  // Al volver de la ventana a la ficha que estaba detrás, no hace falta pintarla otra vez
+  if (estado.deVentana) {
+    estado.deVentana = false;
+    if (estado.ficha && location.hash === direccion(estado.ficha.nivel, estado.ficha.codigo)) { document.title = estado.tituloFicha; return; }
+  }
   const q = new URLSearchParams(consulta || "");
   if (q.get("tema") && estado.temas.temas.some((t) => t.id === q.get("tema"))) estado.tema = q.get("tema");
   if (q.get("v")) estado.columna = q.get("v");
@@ -1422,6 +1575,7 @@ async function iniciar() {
   estado.temas = await cargar("temas.json");
   iniciarMapa();
   iniciarBuscador();
+  iniciarVentana();
   $("ir-ficha").addEventListener("click", (ev) => {
     ev.preventDefault();
     $("cabeza").scrollIntoView({ behavior: "smooth" });
@@ -1433,7 +1587,7 @@ async function iniciar() {
   window.addEventListener("resize", () => {
     clearTimeout(espera);
     espera = setTimeout(() => {
-      if (estado.ficha && !location.hash.startsWith("#/fuentes") && anchoGrafico() !== ancho) { ancho = anchoGrafico(); pintarFicha(); }
+      if (estado.ficha && anchoGrafico() !== ancho) { ancho = anchoGrafico(); pintarFicha(); }
     }, 200);
   });
   seguirRuta();
