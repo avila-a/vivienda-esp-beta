@@ -89,6 +89,8 @@ html, body { overflow-x: hidden; }
 .leyenda ul { list-style: none; padding: 0; margin: 4px 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .leyenda li { display: flex; align-items: center; gap: 6px; }
 .muestra { display: inline-block; width: 16px; height: 12px; border: 1px solid #999; }
+.muestra.rayada { background: repeating-linear-gradient(-45deg, #8a8880 0 1px, #f4f3ef 1px 4px); }
+#mapa.con-mar { background: #cfe1ee; }   /* mapas sin calles de fondo: el mar */
 .muestra.discontinua { background: transparent; border: 2px dashed #222; }
 .muestra.redonda { width: 12px; border-radius: 50%; border-color: #22211f; }
 .tamano-capitales { display: block; max-width: 100%; }

@@ -12,6 +12,7 @@ function filasDescarga(ficha, col) {
   }
   for (const b of ficha.bloques) {
     if (b.id === "anuncios") continue;   // fuente no oficial, sin permiso para redistribuirla
+    if (b.id === "airbnb") continue;     // Inside Airbnb pide no republicar sus datos
     for (const x of b.cifras) {
       if (x.rango) continue;   // rango de las áreas que contiene: cifra propia de la página, no va en la descarga
       const avisos = x.avisos.map((i) => ficha.avisos[i]).join("; ");

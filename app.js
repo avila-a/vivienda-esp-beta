@@ -25,7 +25,7 @@ const NOMBRE_CAPA = { distritos: "Distritos", secciones: "Secciones censales", m
 const SOLO_COMPRA = /^(zonas_|municipios_venta$)/;
 const SIN_DATO = "#d6d6d6";
 // Color de cada tema, el de colores_proyecto (0_funciones.R): para la barra del lugar en las comparaciones
-const COLOR_TEMA = [[/^construidas_protegidas/, "#1baf7a"], [/^turistic/, "#e87ba4"], [/^(alquil|anuncio)/, "#eb6834"], [/^(no_principales|menos_de|uno_a)/, "#eda100"],
+const COLOR_TEMA = [[/^construidas_protegidas/, "#1baf7a"], [/^(turistic|airbnb_)/, "#e87ba4"], [/^(alquil|anuncio)/, "#eb6834"], [/^(no_principales|menos_de|uno_a)/, "#eda100"],
   [/^vacia/, "#6250d6"], [/^(construid|anios_)/, "#3a3a38"], [/^(precio_venta|compras)/, "#2a78d6"]];
 const AZUL_CLARO = "#9cc3ef";   // la otra medida del precio de venta, y la otra línea de las compras
 const GRIS = "#c9c7c0";
@@ -42,10 +42,29 @@ function conPeriodo(texto, periodos) {
 }
 // Cifras de elDiario.es: llevan su cita al lado
 const DE_ELDIARIO = /^anuncios_|^vacias_por_anuncio$/;
-function htmlCita(trozos) {
-  trozos = trozos || (estado.temas && estado.temas.cita_eldiario) || [];
+const DE_INSIDEAIRBNB = /^airbnb_/;
+// La cita de la fuente de una cifra, si la necesita (elDiario.es e Inside Airbnb). La de Inside Airbnb, la de las áreas
+// que se ven: `ia`, la de un mapa; si no, la del área de la ficha; si no, la de todas. `corta`: la de la ficha (la
+// larga, con los cambios a los datos, solo debajo del mapa; decisión del usuario, 28 de octubre de 2026)
+const citaDe = (columna, ia, corta) => DE_ELDIARIO.test(columna) ? htmlCita() :
+  DE_INSIDEAIRBNB.test(columna) ? htmlCita(ia || citaFichaIA(estado.ficha), corta) : "";
+const citaFichaIA = (f) => {
+  const t = estado.temas || {};
+  return (f && f.insideairbnb && t.citas_insideairbnb && t.citas_insideairbnb[f.insideairbnb]) || t.cita_insideairbnb;
+};
+// `corta`: la de la ficha, sin los trozos que solo van en la larga (la de Inside Airbnb, sin los cambios a los datos)
+function htmlCita(trozos, corta) {
+  trozos = (trozos || (estado.temas && estado.temas.cita_eldiario) || [])
+    .filter((t) => !t.solo || t.solo === (corta ? "corta" : "larga"));
   return trozos.length ? '<p class="fuente">' + trozos.map((t) => t.url ? '<a href="' + esc(t.url) + '">' + esc(t.texto) + "</a>" : esc(t.texto)).join("") + "</p>" : "";
 }
+// El título de una cifra sin su fecha final («Viviendas turísticas, mayo de 2026»), donde la fecha ya sale debajo
+// (decisión del usuario, 28 de octubre de 2026: la fecha va en la nota, no en el título). Solo si la nota la tiene
+const FECHA_FINAL = /, ((?:\d{1,2} de )?(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre) de \d{4}|\d{4}(?:[–-]\d{4})?)$/;
+const sinFecha = (titulo, fecha) => {
+  const m = FECHA_FINAL.exec(titulo || "");
+  return m && fecha && fecha.indexOf(m[1]) >= 0 ? titulo.slice(0, m.index) : titulo;
+};
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const estrecha = () => window.matchMedia("(max-width: 899px)").matches;
@@ -89,7 +108,9 @@ const estado = {
 
 const temaActual = () => estado.temas.temas.find((t) => t.id === estado.tema) || estado.temas.temas[0];
 // Variables del tema que tiene el nivel de la ficha (las que están en su tabla)
-const variablesDisponibles = () => temaActual().variables.filter((v) => estado.col && estado.col.columnas[v.columna]);
+// Las que llevan `solo_con_dato` (Airbnb), solo si la ficha tiene la cifra
+const conDato = (v) => { const x = estado.cifras.get(v.columna); return !!x && x.valor != null; };
+const variablesDisponibles = () => temaActual().variables.filter((v) => estado.col && estado.col.columnas[v.columna] && (!v.solo_con_dato || conDato(v)));
 const variableActual = () => variablesDisponibles().find((v) => v.columna === estado.columna) || null;
 // Las mismas, por cifra (`grupo`), con sus bases en orden
 function gruposDisponibles() {
@@ -116,6 +137,20 @@ function actualizarDireccion() {
   if (estado.ficha) history.replaceState(null, "", direccion(estado.ficha.nivel, estado.ficha.codigo));
 }
 
+// Contador de visitas sin cookies (GoatCounter, lib/goatcounter.js; 28 de octubre de 2026): una visita por lugar y
+// pestaña (sin la variable del mapa) y por ventana, y un evento por descarga. En localhost no cuenta; sin el script, nada.
+function contarVisita(ruta, titulo, evento) {
+  if (!window.goatcounter || !window.goatcounter.count) return;
+  if (!ruta) {
+    const f = estado.ficha;
+    if (!f) return;
+    ruta = "/" + f.nivel + "/" + f.codigo + "?tema=" + estado.tema;
+    titulo = (f.nivel === "nacional" ? "España" : f.titulo) + " · " + temaActual().titulo;
+  }
+  window.goatcounter.count({ path: ruta, title: titulo, event: !!evento });
+}
+const contarDescarga = (archivo) => contarVisita("descarga/" + archivo, archivo, true);
+
 function pintarPestanas() {
   const nav = $("pestanas");
   nav.innerHTML = estado.temas.temas.map((t) => '<button type="button" role="tab" data-tema="' + t.id + '" aria-selected="' +
@@ -129,6 +164,7 @@ function pintarPestanas() {
     pintarPestanas();
     pintarFicha();
     verMapaDeFicha(estado.ficha, false);
+    contarVisita();
     b.scrollIntoView({ block: "nearest", inline: "nearest" });
   }));
 }
@@ -156,6 +192,7 @@ function irAInfoVacias() {
   estado.infoVacias = true;
   pintarFicha();
   verMapaDeFicha(estado.ficha, false);
+  contarVisita();
   $("info-vacias").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -256,6 +293,28 @@ const R_MIN = 5, R_MAX = 22;   // radio en píxeles de la capital menos y más p
 const conCirculos = () => { const j = indiceVariable(); return !!(j && estado.meta.variables[j - 1].circulos && estado.meta.capitales); };
 const radioCapital = (pob, escala) => Math.sqrt(R_MIN * R_MIN + (R_MAX * R_MAX - R_MIN * R_MIN) * (pob - escala[0]) / (escala[1] - escala[0]));
 
+// Tierra que no es de ningún municipio: rayada (////), debajo de las áreas, con su etiqueta; y los países vecinos en los
+// mapas sin calles de fondo, donde el mar es azul (pedido por el usuario, 27 de octubre de 2026)
+const TEXTO_HUECO = "Territorio que no pertenece a ningún municipio (montes o pastos comunes a varios pueblos, parques nacionales): sin viviendas ni datos.";
+const TIERRA = "#f4f3ef", BORDE_TIERRA = "#c9c7c0", RAYA = "#8a8880";
+let patronHueco = null;
+function rayado() {
+  if (patronHueco) return patronHueco;
+  const c = document.createElement("canvas");
+  c.width = c.height = 6;
+  const x = c.getContext("2d");
+  x.fillStyle = TIERRA;
+  x.fillRect(0, 0, 6, 6);
+  x.strokeStyle = RAYA;
+  x.lineWidth = 1;
+  x.beginPath();
+  // la diagonal y sus dos trozos en las esquinas, para que las rayas sigan de una tesela a otra
+  [[0, 6, 6, 0], [-1, 1, 1, -1], [5, 7, 7, 5]].forEach(([a, b, d, e]) => { x.moveTo(a, b); x.lineTo(d, e); });
+  x.stroke();
+  patronHueco = x.createPattern(c, "repeat");
+  return patronHueco;
+}
+
 function estilo(feature) {
   const p = feature.properties;
   const j = indiceVariable();
@@ -325,16 +384,31 @@ async function verGrupo(grupo, encuadrarSiempre) {
     if (estado.capa) estado.capa.remove();
     if (estado.cajaCanarias) { estado.cajaCanarias.remove(); estado.cajaCanarias = null; }
     if (estado.capaFondo) { estado.capaFondo.remove(); estado.capaFondo = null; }
+    if (estado.capaPaises) { estado.capaPaises.remove(); estado.capaPaises = null; }
+    if (estado.capaHuecos) { estado.capaHuecos.remove(); estado.capaHuecos = null; }
     estado.grupo = grupo;
     estado.meta = datos.meta;
     estado.porCodigo.clear();
     // Sin fondo en el mapa de provincias: Canarias va desplazada y no coincidiría con las calles
     if (datos.meta.canarias_desplazada) estado.fondo.remove();
     else estado.fondo.addTo(estado.mapa);
+    // Sin calles, el fondo del mapa es el mar, y los países vecinos van en gris claro
+    $("mapa").classList.toggle("con-mar", !!datos.meta.canarias_desplazada);
+    if (datos.meta.paises) {
+      estado.capaPaises = L.geoJSON(datos.meta.paises, { interactive: false,
+        style: { fillColor: TIERRA, fillOpacity: 1, color: BORDE_TIERRA, weight: 0.6 } }).addTo(estado.mapa);
+    }
     // Provincias en gris debajo de las áreas, sin poder pulsarlas (mapa de los municipios con precio de venta)
     if (datos.meta.fondo) {
       estado.capaFondo = L.geoJSON(datos.meta.fondo, { interactive: false,
         style: { fillColor: "#ecebe7", fillOpacity: 1, color: "#fff", weight: 1 } }).addTo(estado.mapa);
+    }
+    // Antes que las áreas, para quedar debajo: el borde simplificado no coincide del todo con el de ellas
+    if (datos.meta.huecos) {
+      estado.capaHuecos = L.geoJSON(datos.meta.huecos, {
+        style: { fillColor: rayado(), fillOpacity: 1, color: RAYA, weight: 0.6 },
+        onEachFeature: (f, capa) => capa.bindTooltip(esc(TEXTO_HUECO), { sticky: true }),
+      }).addTo(estado.mapa);
     }
     estado.capa = L.geoJSON(datos, {
       style: estilo,
@@ -353,7 +427,7 @@ async function verGrupo(grupo, encuadrarSiempre) {
     }).addTo(estado.mapa);
     // Canarias, desplazada, en un recuadro fino que no se puede pulsar
     if (datos.meta.caja_canarias) {
-      estado.cajaCanarias = L.rectangle(datos.meta.caja_canarias, { interactive: false, fill: false, color: "#8a8880", weight: 1 }).addTo(estado.mapa);
+      estado.cajaCanarias = L.rectangle(datos.meta.caja_canarias, { interactive: false, fill: false, color: TINTA_SUAVE, weight: 1.5 }).addTo(estado.mapa);
     }
   }
   pintarColores();
@@ -403,13 +477,14 @@ function pintarLeyenda() {
   const circulos = conCirculos();
   let hayAviso = false;
   estado.porCodigo.forEach((capa) => { if (capa.feature.properties["a" + j]) hayAviso = true; });
-  let h = "<h3>" + esc(m.titulo) + ": " + esc(v.titulo) + "</h3><ul>";
+  let h = "<h3>" + esc(m.titulo) + ": " + esc(sinFecha(v.titulo, v.fecha)) + "</h3><ul>";
   const forma = circulos ? "muestra redonda" : "muestra";
   h += v.clases.map((c) => '<li><span class="' + forma + '" style="background:' + c.color + '"></span>' +
     esc(c.rotulo) + " (" + c.n + ")</li>").join("");
   // Con círculos, las áreas sin capital no tienen dato, y ya lo dice el texto de debajo
   if (v.sin_dato && !circulos) h += '<li><span class="muestra" style="background:' + SIN_DATO + '"></span>' + esc(v.sin_dato_texto || "sin dato") + " (" + v.sin_dato + ")</li>";
   if (hayAviso) h += '<li><span class="' + forma + ' discontinua"></span>borde discontinuo: la cifra tiene aviso</li>';
+  if (m.huecos) h += '<li><span class="muestra rayada"></span>rayado: territorio que no pertenece a ningún municipio</li>';
   h += "</ul>";
   if (circulos) h += htmlTamanoCapitales(m.capitales, m.nivel);
   h += "<p>" + esc(v.clases_comunes || "Entre paréntesis, cuántas áreas hay en cada clase.") + "</p>";
@@ -417,7 +492,7 @@ function pintarLeyenda() {
   if (v.paleta === "calida") h += "<p>Cuanto más caro, más cálido.</p>";
   if (v.nota) h += "<p>" + esc(v.nota) + "</p>";
   h += "<p>Datos: " + esc([v.fuente, v.fecha].filter(Boolean).join(", ")) + ".</p>";
-  if (DE_ELDIARIO.test(v.columna)) h += htmlCita();
+  h += citaDe(v.columna, m.cita_insideairbnb);
   if (f && m.sin_contorno.indexOf(f.codigo) >= 0) {
     h += '<p class="marca-aviso">' + esc(f.titulo) + " no está en el mapa: no tiene contorno en el Censo 2021.</p>";
   }
@@ -547,7 +622,7 @@ function htmlTarjeta(f, v, elegida) {
     ' data-columna="' + v.columna + '"><span class="numero">' + esc(x ? x.texto : "sin dato") + "</span>" +
     // Un rango (la cifra de las áreas que contiene el lugar): de qué área a qué área
     (x && x.rango ? '<span class="detalle">' + esc(x.rango.detalle) + "</span>" : "") +
-    '<span class="etiqueta">' + esc(c.titulo || v.nombre) + "</span>" + (c.fecha ? '<span class="fecha">' + esc(conPeriodo(c.fecha, [f.periodo_construccion])) + "</span>" : "");
+    '<span class="etiqueta">' + esc(sinFecha(c.titulo, c.fecha) || v.nombre) + "</span>" + (c.fecha ? '<span class="fecha">' + esc(conPeriodo(c.fecha, [f.periodo_construccion])) + "</span>" : "");
   if (elegida && avisos.length) h += '<span class="aviso"><ul>' + avisos.map((i) => "<li>⚠ " + esc(f.avisos[i]) + "</li>").join("") + "</ul></span>";
   else if (avisos.length) h += marcas(f, avisos);
   if (elegida && x && x.rango) h += '<span class="nota-rango">' + esc(x.rango.nota) + "</span>";
@@ -573,6 +648,7 @@ function htmlBloque(f, b, col) {
   }).join("") + "</dl>";
   h += '<p class="fuente">Fuente: ' + esc(info.fuente) + ". Fecha: " + esc(conPeriodo(info.fecha, [f.periodo_construccion])) + ".</p>";
   if (b.id === "anuncios") h += htmlCita();
+  if (b.id === "airbnb") h += htmlCita(citaFichaIA(f), true);
   if (info.nota) h += '<p class="fuente">' + esc(info.nota) + "</p>";
   return h + "</details>";
 }
@@ -716,7 +792,7 @@ function svgBarras(filas, titulo) {
 function htmlComparar(f, columna, mas) {
   mas = mas || {};
   const c = estado.col.columnas[columna] || {};
-  const titulo = c.titulo || columna;
+  const titulo = sinFecha(c.titulo, c.fecha) || columna;
   const ctx = f.contexto && f.contexto.cifras[columna];
   if (!ctx) return "";
   const corto = (t) => t.replace(/^Comunidad autónoma: /, "");
@@ -729,7 +805,7 @@ function htmlComparar(f, columna, mas) {
   });
   const notas = ["Barras: este lugar (en color) y las áreas que lo contienen, hasta España (en gris). Cada área, con la cifra de su tabla; sus avisos, en su ficha."].concat(mas.notas || []);
   const fecha = conPeriodo(c.fecha, f.contexto.areas.map((a) => a.periodo));
-  const cita = (DE_ELDIARIO.test(columna) ? htmlCita() : "") + (mas.pie || "");
+  const cita = citaDe(columna, citaFichaIA(f), true) + (mas.pie || "");
   if (ctx[0].valor == null) return htmlGrafico(titulo, '<p class="sin-grafico">Este lugar no tiene esta cifra: los avisos de la ficha dicen por qué.</p>', null, [], c.fuente, "", cita);
   if (filas.length === 1) notas.push("Las áreas que contienen este lugar no tienen esta cifra.");
   const tabla = tablaHtml(["Área", "Cifra"], ctx.map((x, k) => {
@@ -1251,7 +1327,8 @@ function pintarFicha() {
     h += htmlGraficoVariable(f, v);
     if (enCompra) h += htmlExtrasCompra(f);
     if (tema.id === "vacias" && hayVacias()) h += htmlInfoVacias(estado.infoVacias);
-    if (tema.id === "turisticas" && estado.temas.info_turisticas) h += htmlInfoTuristicas(estado.infoTuristicas);
+    // Solo con las cifras del INE, no con las de Airbnb (pedido por el usuario, 28 de octubre de 2026)
+    if (tema.id === "turisticas" && estado.temas.info_turisticas && !DE_INSIDEAIRBNB.test(v.columna)) h += htmlInfoTuristicas(estado.infoTuristicas);
     const otras = disp.filter((x) => x.columna !== v.columna);
     if (tema.id === "resumen") {
       h += '<h2 class="sub">De un vistazo</h2>' + htmlDestacadas(f);
@@ -1303,6 +1380,7 @@ function conectarFicha(zona, f, col) {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "datos_" + f.nivel + "_" + f.codigo + ".csv";
+    contarDescarga(a.download);
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1335,6 +1413,7 @@ async function verFicha(nivel, codigo) {
   performance.mark("ficha");
   zona.removeAttribute("aria-busy");
   document.title = (nivel === "nacional" ? "" : f.titulo + " · ") + temaActual().titulo + " · Vivienda en España";
+  contarVisita();
   const boton = $("ir-ficha");
   if (estado.desdeMapa && estrecha()) {
     boton.textContent = "Ver la ficha: " + f.titulo;
@@ -1382,6 +1461,7 @@ function abrirVentana(titulo, html) {
   $("ventana-cuerpo").scrollTop = 0;
   if (!v.open) { estado.tituloFicha = document.title; v.showModal(); }
   document.title = titulo + " · Vivienda en España";
+  contarVisita("/" + location.hash.replace(/^#\/?/, "").split("?")[0], titulo);
 }
 
 function iniciarVentana() {
@@ -1582,6 +1662,11 @@ async function iniciar() {
     ev.currentTarget.hidden = true;
   });
   window.addEventListener("hashchange", seguirRuta);
+  // Descargas por enlace (descripción de cada columna, en la ficha y en «Fuentes»): se cuentan al pulsar
+  document.addEventListener("click", (ev) => {
+    const a = ev.target.closest && ev.target.closest('a[href*="descargas/"]');
+    if (a) contarDescarga(a.getAttribute("href").split("/").pop());
+  });
   // Los gráficos se dibujan al ancho de la columna: si cambia, se vuelven a dibujar
   let ancho = anchoGrafico(), espera = null;
   window.addEventListener("resize", () => {
