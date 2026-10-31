@@ -5,7 +5,7 @@ Titular: Antonio Avila-Uribe
 Este repositorio y la página que publica tienen tres partes, con licencias distintas.
 
 
-1. Código de la página (index.html, app.js, csv.js, estilo.css y .github/)
+1. Código de la página (index.html, app.js, graficos.js, csv.js, entrada.js, estilo.css, entrada.css y .github/)
 
    Copyright (c) 2026 Antonio Avila-Uribe. Todos los derechos reservados.
 
@@ -17,11 +17,16 @@ Este repositorio y la página que publica tienen tres partes, con licencias dist
 2. Datos, textos y gráficos de la página y de sus descargas (la carpeta datos/, que se publica desde
    las Releases de este repositorio)
 
-   Copyright (c) 2026 Antonio Avila Uribe. Licencia Creative Commons Reconocimiento-NoComercial-SinObraDerivada
+   Copyright (c) 2026 Antonio Avila-Uribe. Licencia Creative Commons Reconocimiento-NoComercial-SinObraDerivada
    4.0 Internacional (CC BY-NC-ND 4.0):
    https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode.es
 
    Se pueden copiar y compartir tal cual, citando esta página y las fuentes originales, sin fines comerciales y sin modificarlos.
+
+   Permiso adicional para los medios de comunicación: pueden usar las cifras y reproducir los gráficos de
+   esta página, aunque tengan publicidad, siempre que citen la página, enlacen a ella y no alteren las
+   cifras. Este permiso no incluye los datos del Notariado, los recuentos de anuncios de elDiario.es ni los
+   datos de Inside Airbnb, que tienen sus propias condiciones.
 
    Esta licencia cubre solo lo elaborado aquí: la selección, los cálculos, los textos y la presentación.
    Los datos originales siguen con la licencia de cada fuente, que esta licencia no limita:
@@ -33,7 +38,13 @@ Este repositorio y la página que publica tienen tres partes, con licencias dist
      37/2007), citando la fuente.
    - Dirección General del Catastro: licencia de acceso y uso de sus datos INSPIRE (2016). Las cifras
      que salen del Catastro están transformadas y no son información catastral.
+   - Consejo General del Notariado: su aviso legal no permite el uso con fines comerciales sin su
+     autorización previa y expresa (https://www.notariado.org/portal/aviso-legal). Se enseñan en la página
+     con su cita, sin fines comerciales.
    - elDiario.es, recuento de anuncios de idealista: CC BY-NC 4.0. Se enseñan en la página con su cita.
+   - Inside Airbnb: su página de datos indica CC BY 4.0 en el texto y CC0 en el pie; se aplica la más
+     exigente mientras no lo aclaren. Se enseñan en la página con su cita y no van en las descargas.
+   - Natural Earth: dominio público. Solo para dibujar los países vecinos en los mapas de España.
 
    Ninguna de esas fuentes participa en esta página ni la respalda, y no son responsables del
    tratamiento de sus datos.
@@ -42,5 +53,7 @@ Este repositorio y la página que publica tienen tres partes, con licencias dist
 3. Partes de terceros, con su propia licencia
 
    - lib/ (Leaflet): licencia BSD de dos cláusulas, en lib/LICENSE_leaflet.txt.
+   - lib/goatcounter.js (contador de visitas, copia modificada de GoatCounter): licencia ISC, en
+     lib/LICENSE_goatcounter.txt.
    - Fondo del mapa: © colaboradores de OpenStreetMap, ODbL (https://www.openstreetmap.org/copyright).
      No está en este repositorio: lo sirve OpenStreetMap.

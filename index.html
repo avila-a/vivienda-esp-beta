@@ -4,7 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vivienda en España</title>
-<meta name="description" content="Datos de vivienda de cada lugar de España, de la comunidad autónoma a la sección censal: viviendas turísticas, alquiler, vacías, segunda residencia y construcción.">
+<meta name="description" content="Datos de vivienda de cada lugar de España, de la comunidad autónoma a la sección censal: alquiler, compra, viviendas vacías, turísticas, segunda residencia y construcción.">
+<!-- Vista previa al compartir un enlace (la imagen, de vista_previa.R). Si cambia la dirección de la página, cambiar og:url y og:image -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Vivienda en España">
+<meta property="og:title" content="La vivienda de España, en datos">
+<meta property="og:description" content="De tu región a tu barrio: alquiler, compra, viviendas vacías, turísticas, segunda residencia y construcción, con la fuente y los límites de cada cifra.">
+<meta property="og:url" content="https://avila-a.github.io/vivienda-esp-beta/">
+<meta property="og:image" content="https://avila-a.github.io/vivienda-esp-beta/lib/vista_previa.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="La vivienda de España, en datos. De tu región a tu barrio. Mapa de España por provincias.">
+<meta property="og:locale" content="es_ES">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2322211f'/%3E%3Cpath d='M16 6 4.500 16.500H8V26h6v-7h4v7h6v-9.500h3.500z' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="lib/leaflet.css">
 <link rel="stylesheet" href="estilo.css">
 <link rel="stylesheet" href="entrada.css">
@@ -19,8 +32,8 @@
 <body>
 <section id="portada" class="portada" aria-label="Presentación" hidden>
   <div class="portada-cuerpo">
-    <p class="marca-intro">Vivienda en España</p>
-    <h1>La vivienda en España, en datos</h1>
+    <p class="marca-intro">Vivienda en España <span class="beta">(versión beta)</span></p>
+    <h1>La vivienda de España, en datos</h1>
     <p class="subtitulo">De tu región a tu barrio</p>
     <p class="entrada">Mira cómo ha cambiado el alquiler, cuántas viviendas están vacías o se anuncian para turistas, y cuánto se construye.</p>
     <div class="temas-intro">
@@ -36,6 +49,7 @@
       </ul>
     </div>
     <a class="boton-entrar" href="#/nacional/00?tema=resumen">Empezar</a>
+    <p class="fuentes-intro">Con datos del INE, Eurostat, el Ministerio de Vivienda, el Catastro, el Notariado y otras fuentes. Proyecto personal de Antonio Avila-Uribe, sin publicidad ni ánimo de lucro.</p>
   </div>
 </section>
 <script src="entrada.js"></script>
@@ -50,6 +64,10 @@
   <nav class="enlaces-cabecera" aria-label="Páginas">
     <a class="enlace-fuentes" href="#/fuentes">Fuentes</a>
     <a class="enlace-fuentes" href="#/proyecto">Sobre el proyecto</a>
+    <button type="button" id="compartir" class="boton-compartir" aria-label="Compartir esta página">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.600 13.500 6.800 4M15.400 6.500l-6.800 4"/></svg>
+      <span id="compartir-texto" aria-live="polite">Compartir</span>
+    </button>
   </nav>
 </header>
 <nav id="pestanas" class="pestanas" role="tablist" aria-label="Temas"></nav>

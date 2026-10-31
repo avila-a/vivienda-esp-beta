@@ -29,3 +29,6 @@ html.con-portada { overflow: hidden; }
   background: var(--tinta); color: #fff; border-radius: 8px; text-decoration: none;
 }
 .portada .boton-entrar:hover, .portada .boton-entrar:focus-visible { background: #000; }
+/* «Beta», en segundo plano junto al nombre (decisión del usuario, 31 de octubre de 2026) */
+.portada .marca-intro .beta { margin-left: 6px; font-size: 12px; letter-spacing: 0; text-transform: none; color: #77756f; }
+.portada .fuentes-intro { margin: 24px 0 0; font-size: 14px; line-height: 1.45; text-align: center; color: var(--tinta-suave); }

@@ -1443,7 +1443,9 @@ async function verFuentes() {
   h += "<section><h2>Descripción de cada columna</h2><ul>" + d.descripciones.map((x) => '<li><a href="' + x.archivo + '">' + esc(x.nivel) + "</a></li>").join("") + "</ul></section>";
   h += "<section><h2>Mapa</h2><p>" + esc(d.mapa) + "</p></section>";
   if (d.licencia) {
-    h += '<section id="licencia"><h2>Licencia y condiciones de uso</h2>' + d.licencia.parrafos.map((p) => "<p>" + esc(p) + "</p>").join("") +
+    // Permiso para los medios (decisión del usuario, 31 de octubre de 2026). También en LICENSE
+    const permisoMedios = "Los medios de comunicación pueden usar las cifras y reproducir los gráficos de esta página, aunque tengan publicidad, siempre que citen la página, enlacen a ella y no alteren las cifras. Este permiso no incluye los datos del Notariado, los recuentos de anuncios de elDiario.es ni los datos de Inside Airbnb, que tienen sus propias condiciones.";
+    h += '<section id="licencia"><h2>Licencia y condiciones de uso</h2>' + d.licencia.parrafos.concat(permisoMedios).map((p) => "<p>" + esc(p) + "</p>").join("") +
       '<p><a rel="license" href="' + esc(d.licencia.enlace.url) + '">' + esc(d.licencia.enlace.texto) + "</a></p></section>";
   }
   h += "</div>";
@@ -1484,6 +1486,18 @@ const esRutaVentana = () => /^#\/(fuentes|proyecto)\b/.test(location.hash);
 
 // --- Página «Sobre el proyecto»: proyecto personal y comentarios (comentarios.md) --------------------------------
 
+// Temporal: el aviso corregido el 31 de octubre de 2026, para publicarlo sin un zip de datos nuevo. Es el de texto_comentarios.md;
+// con el próximo zip, proyecto.json ya lo lleva: quitar esta constante y volver a usar d.aviso_comentarios.
+const AVISO_COMENTARIOS = "<p>Esta página no usa cookies: contamos las visitas de forma anónima, con GoatCounter. El formulario es un servicio de Google, que sí puede usar cookies. Solo se abre si pulsas el botón. Si aceptas, tu comentario puede publicarse en esta página, con su respuesta.</p>";
+
+// Cómo citar la página: la dirección es la de donde se está viendo, y la fecha, la de hoy (31 de octubre de 2026)
+function htmlComoCitar() {
+  const direccionPagina = location.origin + location.pathname;
+  const hoy = new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+  return '<div class="proyecto-citar"><h2>Cómo citar</h2><p>Antonio Avila-Uribe, <em>Vivienda en España</em>, ' +
+    esc(direccionPagina) + ", consultado el " + esc(hoy) + ".</p></div>";
+}
+
 // Textos y enlaces de proyecto.json. El formulario de Google se abre en otra ventana, solo al pulsar el botón (sin cookies de Google
 // hasta entonces); la lista de resueltos sale de una hoja pública que escribe una persona: siempre con textContent.
 async function verProyecto() {
@@ -1492,7 +1506,7 @@ async function verProyecto() {
     '<div class="proyecto-texto">' + d.texto + "</div>" +
     '<aside class="proyecto-comentar"><h2>Hacer un comentario</h2>' + d.intro_comentarios +
       '<p><a class="boton-formulario" href="' + esc(d.formulario.ver) + '" target="_blank" rel="noopener">Abrir el formulario (se abre en Google)</a></p>' +
-      '<div class="aviso-formulario">' + d.aviso_comentarios + "</div></aside>" +
+      '<div class="aviso-formulario">' + AVISO_COMENTARIOS + "</div>" + htmlComoCitar() + "</aside>" +
     '<section class="proyecto-resueltos"><h2>Comentarios y dudas resueltos</h2><div id="resueltos"></div></section></div>');
   pintarResueltos(d.hoja_resueltos);
 }
@@ -1651,11 +1665,37 @@ function seguirRuta() {
   return verFicha("nacional", "00");
 }
 
+// Botón «Compartir» de la cabecera (31 de octubre de 2026): en el móvil, el menú de compartir del teléfono; en el ordenador,
+// copia la dirección de lo que se está viendo. Sin cifras en el texto: solo el título de la página.
+function iniciarCompartir() {
+  const boton = $("compartir"), texto = $("compartir-texto");
+  let espera = null;
+  const avisar = (mensaje) => {
+    texto.textContent = mensaje;
+    clearTimeout(espera);
+    espera = setTimeout(() => { texto.textContent = "Compartir"; }, 2000);
+  };
+  boton.addEventListener("click", async () => {
+    contarVisita("compartir/" + location.hash.replace(/^#\/?/, "").split("?")[0], "Compartir", true);
+    if (navigator.share && window.matchMedia("(pointer: coarse)").matches) {
+      try { await navigator.share({ title: document.title, url: location.href }); } catch (e) { /* cancelado por quien comparte */ }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(location.href);
+      avisar("Enlace copiado");
+    } catch (e) {
+      avisar("No se pudo copiar");
+    }
+  });
+}
+
 async function iniciar() {
   estado.temas = await cargar("temas.json");
   iniciarMapa();
   iniciarBuscador();
   iniciarVentana();
+  iniciarCompartir();
   $("ir-ficha").addEventListener("click", (ev) => {
     ev.preventDefault();
     $("cabeza").scrollIntoView({ behavior: "smooth" });
