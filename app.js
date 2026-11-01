@@ -1412,7 +1412,10 @@ async function verFicha(nivel, codigo) {
   pintarFicha();
   performance.mark("ficha");
   zona.removeAttribute("aria-busy");
-  document.title = (nivel === "nacional" ? "" : f.titulo + " · ") + temaActual().titulo + " · Vivienda en España";
+  // Debajo de la portada se carga la ficha de España: la portada conserva su título, que es el que ve Google (indexacion.md)
+  if (!document.documentElement.classList.contains("con-portada")) {
+    document.title = (nivel === "nacional" ? "" : f.titulo + " · ") + temaActual().titulo + " · Vivienda en España";
+  }
   contarVisita();
   const boton = $("ir-ficha");
   if (estado.desdeMapa && estrecha()) {
