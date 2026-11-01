@@ -1,4 +1,8 @@
 # Los datos van en el zip de cada Release, no en git
 datos/
+espana/
+comunidad/
+provincia/
+sitemap.xml
 *.zip
 _site/

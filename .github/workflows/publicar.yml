@@ -61,6 +61,12 @@ jobs:
           for f in buscador.json fuentes.json temas.json; do
             test -s "_site/datos/$f" || { echo "Falta datos/$f"; exit 1; }
           done
+          # Las copias de index.html de cada lugar y el sitemap van en el mismo zip, porque llevan cifras
+          esperadas=$(grep '^paginas:' _site/datos/manifiesto.txt | cut -d' ' -f2 | tr -d '\r')
+          paginas=$(find _site/espana _site/comunidad _site/provincia -name index.html | wc -l)
+          echo "Direcciones de lugares: $paginas (el manifiesto dice $esperadas)"
+          test "$paginas" -eq "$esperadas" || { echo "Faltan o sobran copias en el zip"; exit 1; }
+          test -s _site/sitemap.xml || { echo "Falta sitemap.xml"; exit 1; }
           test -z "$(find _site -type l)" || { echo "El sitio no puede llevar enlaces simbólicos"; exit 1; }
           du -sh _site
 

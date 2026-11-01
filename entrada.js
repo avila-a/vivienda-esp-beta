@@ -9,5 +9,12 @@
     document.documentElement.classList.toggle("con-portada", enPortada);
   }
   window.addEventListener("hashchange", ver);
+  // «Empezar» es un enlace real para que Google llegue a los lugares (indexacion.md); un clic normal sigue sin recargar
+  portada.querySelector("a[data-ruta]").addEventListener("click", (ev) => {
+    if (ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+    ev.preventDefault();
+    ev.stopPropagation();   // app.js, si ya está cargado, haría lo mismo
+    location.hash = ev.currentTarget.dataset.ruta;
+  });
   ver();
 })();

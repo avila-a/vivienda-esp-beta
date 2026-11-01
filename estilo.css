@@ -126,6 +126,7 @@ html, body { overflow-x: hidden; }
 .sin-datos { margin: 8px 0; }
 
 .bloque { border-top: 1px solid var(--borde); padding: 4px 0; }
+.lista-lugares { list-style: none; margin: 0; padding: 0 0 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 12px; }
 /* La flecha dentro de la columna, como en «Ver los datos del gráfico» (pedido por el usuario el 21 de octubre de 2026) */
 .bloque > summary { cursor: pointer; padding: 8px 0; font-weight: 600; list-style-position: inside; }
 .bloque > summary .marca-aviso { margin-left: 6px; font-weight: 600; }

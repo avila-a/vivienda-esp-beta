@@ -136,6 +136,24 @@ function direccion(nivel, codigo) {
 function actualizarDireccion() {
   if (estado.ficha) history.replaceState(null, "", direccion(estado.ficha.nivel, estado.ficha.codigo));
 }
+// Dirección real de un lugar (/provincia/cadiz-11/; copias de index.html de paginas_lugares.R, con <base> a la raíz): mientras
+// se sigue en ella, se conservan esa dirección y el título de la copia, que son los que ve Google. Al pasar a otra vista,
+// la dirección vuelve a ser la de siempre, en la raíz y con «#/».
+const enLugarReal = () => !!window.LUGAR_INICIAL && location.pathname.endsWith(window.LUGAR_INICIAL.ruta);
+const TITULO_INICIAL = document.title;
+// Enlaces reales, para que Google los pueda seguir, en el lugar de una dirección real: la copia trae las direcciones de los
+// lugares a los que enlaza, y un clic normal sigue yendo por «data-ruta», sin recargar (ver el clic en a[data-ruta], en iniciar).
+const esLugarInicial = (f) => !!window.LUGAR_INICIAL && f.nivel === window.LUGAR_INICIAL.nivel && f.codigo === window.LUGAR_INICIAL.codigo;
+function enlaceLugar(f, ruta, texto) {
+  const real = esLugarInicial(f) && window.LUGAR_INICIAL.enlaces[ruta];
+  return (real ? '<a href="' + esc(real) + '" data-ruta="' + esc(ruta) + '">' : '<a href="' + ruta + '">') + esc(texto) + "</a>";
+}
+function htmlLugares(f) {
+  const l = esLugarInicial(f) && window.LUGAR_INICIAL.lista;
+  if (!l) return "";
+  return '<details class="bloque" data-lista-lugares><summary>' + esc(l.titulo) + '</summary><ul class="lista-lugares">' +
+    l.lugares.map((x) => "<li>" + enlaceLugar(f, x.enlace, x.nombre) + "</li>").join("") + "</ul></details>";
+}
 
 // Contador de visitas sin cookies (GoatCounter, lib/goatcounter.js; 28 de octubre de 2026): una visita por lugar y
 // pestaña (sin la variable del mapa) y por ventana, y un evento por descarga. En localhost no cuenta; sin el script, nada.
@@ -1282,7 +1300,7 @@ function htmlDescargas(f) {
 function pintarCabeza() {
   const f = estado.ficha, tema = temaActual();
   let h = "";
-  if (f.ruta.length) h += '<p class="migas">' + f.ruta.map((r) => '<a href="' + r.enlace + '">' + esc(r.titulo) + "</a>").join(" › ") + "</p>";
+  if (f.ruta.length) h += '<p class="migas">' + f.ruta.map((r) => enlaceLugar(f, r.enlace, r.titulo)).join(" › ") + "</p>";
   h += "<h1 data-titulo=\"" + esc(f.titulo) + "\">" + (f.cabecera ? esc(f.cabecera.texto) + " <small class=\"codigo\">" + esc(f.cabecera.codigo) + "</small>" : esc(f.titulo)) + "</h1>";
   if (f.nivel === "nacional") h += '<p class="entrada">Elige un tema arriba y un lugar en el mapa, o búscalo. Cada cifra lleva al lado sus avisos, y cada gráfico, su fuente.</p>';
   // Un botón por cifra y, si la elegida tiene varias bases, el selector de la base (decisión del usuario, 18 de
@@ -1343,6 +1361,7 @@ function pintarFicha() {
   const resto = f.bloques.filter((b) => tema.bloques.indexOf(b.id) < 0);
   if (delTema.length) h += '<h2 class="lista">Cifras de este tema</h2>' + delTema.map((b) => htmlBloque(f, b, col)).join("");
   if (resto.length) h += '<h2 class="lista">Otras cifras de este lugar</h2>' + resto.map((b) => htmlBloque(f, b, col)).join("");
+  h += htmlLugares(f);
   h += htmlDescargas(f);
   const zona = $("ficha");
   zona.innerHTML = h;
@@ -1407,13 +1426,14 @@ async function verFicha(nivel, codigo) {
   estado.cifras = new Map();
   f.bloques.forEach((b) => b.cifras.forEach((x) => estado.cifras.set(x.columna, x)));
   ajustarVariable();
-  actualizarDireccion();
+  if (!enLugarReal()) actualizarDireccion();
   pintarPestanas();
   pintarFicha();
   performance.mark("ficha");
   zona.removeAttribute("aria-busy");
   // Debajo de la portada se carga la ficha de España: la portada conserva su título, que es el que ve Google (indexacion.md)
-  if (!document.documentElement.classList.contains("con-portada")) {
+  if (enLugarReal()) document.title = TITULO_INICIAL;
+  else if (!document.documentElement.classList.contains("con-portada")) {
     document.title = (nivel === "nacional" ? "" : f.titulo + " · ") + temaActual().titulo + " · Vivienda en España";
   }
   contarVisita();
@@ -1495,7 +1515,7 @@ const AVISO_COMENTARIOS = "<p>Esta página no usa cookies: contamos las visitas 
 
 // Cómo citar la página: la dirección es la de donde se está viendo, y la fecha, la de hoy (31 de octubre de 2026)
 function htmlComoCitar() {
-  const direccionPagina = location.origin + location.pathname;
+  const direccionPagina = new URL(".", document.baseURI).href;   // la raíz, también desde la dirección real de un lugar
   const hoy = new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
   return '<div class="proyecto-citar"><h2>Cómo citar</h2><p>Antonio Avila-Uribe, <em>Vivienda en España</em>, ' +
     esc(direccionPagina) + ", consultado el " + esc(hoy) + ".</p></div>";
@@ -1638,7 +1658,11 @@ function adelantarMapa(nivel, codigo) {
 // Las direcciones sin tema ni variable (migas, buscador) conservan los que se están viendo
 function seguirRuta() {
   performance.clearMarks(); performance.clearMeasures(); performance.mark("ruta");
-  const [camino, consulta] = location.hash.replace(/^#\/?/, "").split("?");
+  // En la dirección real de un lugar: sin «#», su ficha; con «#/…», se pasa a la raíz, con <base> (ver enLugarReal)
+  if (enLugarReal() && location.hash) history.replaceState(null, "", location.hash);
+  estado.caminoVisto = location.pathname;
+  const ruta =enLugarReal() ? window.LUGAR_INICIAL.nivel + "/" + window.LUGAR_INICIAL.codigo : location.hash.replace(/^#\/?/, "");
+  const [camino, consulta] = ruta.split("?");
   const partes = camino.split("/");
   document.querySelectorAll(".enlaces-cabecera a").forEach((a) => {
     if (a.getAttribute("href") === "#/" + partes[0]) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
@@ -1705,6 +1729,20 @@ async function iniciar() {
     ev.currentTarget.hidden = true;
   });
   window.addEventListener("hashchange", seguirRuta);
+  // Atrás y adelante entre la dirección real de un lugar y la raíz: cambia el camino, y entonces no hay hashchange
+  window.addEventListener("popstate", () => {
+    if (window.LUGAR_INICIAL && location.pathname !== estado.caminoVisto) seguirRuta();
+  });
+  // Con <base>, un enlace «#/…» recargaría la página desde la raíz: en la dirección real de un lugar se sigue sin recargar
+  document.addEventListener("click", (ev) => {
+    const a = ev.target.closest && ev.target.closest('a[href^="#/"]');
+    if (a && enLugarReal()) { ev.preventDefault(); location.hash = a.getAttribute("href"); }
+  });
+  // Enlaces reales: un clic normal va por la ruta, sin recargar; abrirlo en otra pestaña o ventana usa la dirección real
+  document.addEventListener("click", (ev) => {
+    const a = ev.target.closest && ev.target.closest("a[data-ruta]");
+    if (a && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey) { ev.preventDefault(); location.hash = a.dataset.ruta; }
+  });
   // Descargas por enlace (descripción de cada columna, en la ficha y en «Fuentes»): se cuentan al pulsar
   document.addEventListener("click", (ev) => {
     const a = ev.target.closest && ev.target.closest('a[href*="descargas/"]');
