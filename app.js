@@ -97,7 +97,7 @@ function cargar(ruta) {
 
 const estado = {
   mapa: null, fondo: null, capa: null, cajaCanarias: null, grupo: null, meta: null,
-  temas: null, tema: "resumen", columna: null,
+  temas: null, tema: "resumen", columna: null, columnaAuto: false,
   ficha: null, col: null, porCodigo: new Map(), cifras: new Map(),
   capaElegida: {}, desdeMapa: false, infoVacias: false, infoTuristicas: false,
   sinColor: false, botonColor: null,   // colores del mapa quitados, para ver las calles
@@ -110,7 +110,14 @@ const temaActual = () => estado.temas.temas.find((t) => t.id === estado.tema) ||
 // Variables del tema que tiene el nivel de la ficha (las que están en su tabla)
 // Las que llevan `solo_con_dato` (Airbnb), solo si la ficha tiene la cifra
 const conDato = (v) => { const x = estado.cifras.get(v.columna); return !!x && x.valor != null; };
-const variablesDisponibles = () => temaActual().variables.filter((v) => estado.col && estado.col.columnas[v.columna] && (!v.solo_con_dato || conDato(v)));
+// En el Resumen de España, la subida del alquiler va primero (decisión del usuario, 2 de noviembre de 2026); en los demás lugares, el orden de temas.json
+const GRUPO_PRIMERO_ESPANA = "Subida del alquiler y coste de vida";
+const resumenDeEspana = () => estado.tema === "resumen" && !!estado.ficha && estado.ficha.nivel === "nacional";
+function variablesDisponibles() {
+  const disp = temaActual().variables.filter((v) => estado.col && estado.col.columnas[v.columna] && (!v.solo_con_dato || conDato(v)));
+  if (!resumenDeEspana()) return disp;
+  return disp.filter((v) => v.grupo === GRUPO_PRIMERO_ESPANA).concat(disp.filter((v) => v.grupo !== GRUPO_PRIMERO_ESPANA));
+}
 const variableActual = () => variablesDisponibles().find((v) => v.columna === estado.columna) || null;
 // Las mismas, por cifra (`grupo`), con sus bases en orden
 function gruposDisponibles() {
@@ -122,15 +129,26 @@ function gruposDisponibles() {
   return grupos;
 }
 
+// `columnaAuto`: la cifra la puso la página, no la eligió nadie, y no va en la dirección. En el Resumen: España abre siempre
+// con su primera cifra; al ir a otro lugar se sigue con esa cifra si el lugar la tiene (y entonces ya va en la dirección), y
+// si no, con la primera del lugar: la subida del alquiler falta en muchos municipios, que si no abrirían con «sin dato».
 function ajustarVariable() {
   const disp = variablesDisponibles();
-  if (!disp.some((v) => v.columna === estado.columna)) estado.columna = disp.length ? disp[0].columna : null;
+  if (estado.columnaAuto && estado.tema === "resumen") {
+    const v = disp.find((x) => x.columna === estado.columna);
+    if (resumenDeEspana() || !v || !conDato(v)) estado.columna = null;
+    else if (v !== disp[0]) estado.columnaAuto = false;
+  }
+  if (!disp.some((v) => v.columna === estado.columna)) {
+    estado.columna = disp.length ? disp[0].columna : null;
+    estado.columnaAuto = true;
+  }
 }
 
 function direccion(nivel, codigo) {
   const q = new URLSearchParams();
   q.set("tema", estado.tema);
-  if (estado.columna) q.set("v", estado.columna);
+  if (estado.columna && !(estado.columnaAuto && estado.tema === "resumen")) q.set("v", estado.columna);
   return "#/" + nivel + "/" + codigo + "?" + q.toString();
 }
 function actualizarDireccion() {
@@ -217,6 +235,7 @@ function irAInfoVacias() {
 function elegirVariable(columna) {
   if (columna === estado.columna) return;
   estado.columna = columna;
+  estado.columnaAuto = false;
   actualizarDireccion();
   pintarFicha();
   verMapaDeFicha(estado.ficha, false);
@@ -644,6 +663,8 @@ function htmlTarjeta(f, v, elegida) {
   if (elegida && avisos.length) h += '<span class="aviso"><ul>' + avisos.map((i) => "<li>⚠ " + esc(f.avisos[i]) + "</li>").join("") + "</ul></span>";
   else if (avisos.length) h += marcas(f, avisos);
   if (elegida && x && x.rango) h += '<span class="nota-rango">' + esc(x.rango.nota) + "</span>";
+  // Es lo primero que se ve de la página: su límite principal, a la vista y no solo en las notas plegadas
+  if (elegida && f.nivel === "nacional" && /^alquiler_(m2|mes)_variacion/.test(v.columna)) h += '<span class="nota-rango">Alquileres en vigor declarados a Hacienda: lo que pagan quienes ya tienen contrato, no el precio de los contratos nuevos.</span>';
   else if (elegida && c.que_es) h += '<span class="que-es-tarjeta">' + esc(c.que_es) + "</span>";
   return h + (elegida ? "</div>" : "</button>");
 }
@@ -1136,7 +1157,7 @@ function htmlTemporada(s) {
 // cada área es una bola en una línea de la cifra más baja a la más alta, del color de su clase en el mapa y de tamaño
 // según su población; con nombre, las más pobladas y, si hay muchas, la más alta y la más baja. Pieza común: dibuja
 // cualquier cifra que preparar_datos.R dé en `rangos` (ver «Rangos» allí). Al pasar por una bola se marca su área en el
-// mapa, y al pasar por el mapa, su bola (marcarEnRangos). `refs`: líneas discontinuas ({ valor, texto, nombre, color }).
+// mapa, y al pasar por el mapa, su bola (marcarEnRangos). Las subidas con salario e IPC van con svgRangoSubida().
 const anchoTexto = (s) => s.length * 6.4 + 6;   // ancho aproximado de un texto de 12 px
 function svgRango(gr, c, refs, titulo) {
   const W = anchoGrafico(), alto = 15;
@@ -1201,29 +1222,129 @@ function svgRango(gr, c, refs, titulo) {
     '<g class="resaltes" pointer-events="none"></g></svg>';
 }
 
+// Reparte los rótulos por las filas dadas ({ lado: "a" o "b", q }), de izquierda a derecha, y en cada fila los aparta de
+// lado lo justo para que no se pisen. Devuelve false si no caben o si alguno queda a más de maxDesvio de su bola.
+function colocarRotulos(rot, filas, izq, limite, maxDesvio) {
+  const por = filas.map(() => []);
+  rot.forEach((r, i) => por[i % filas.length].push(r));
+  let cabe = true;
+  por.forEach((lista, f) => {
+    let fin = izq;
+    for (const r of lista) { r.w = anchoTexto(r.nombre + " " + r.cifra); r.a = Math.max(r.x - r.w / 2, fin); fin = r.a + r.w + 4; }
+    let tope = limite;
+    for (let i = lista.length - 1; i >= 0; i--) { const r = lista[i]; if (r.a + r.w > tope) r.a = tope - r.w; tope = r.a - 4; }
+    for (const r of lista) {
+      if (r.a < izq) cabe = false;
+      r.lx = r.a + r.w / 2; r.lado = filas[f].lado; r.q = filas[f].q;
+      if (Math.abs(r.lx - r.x) > maxDesvio) cabe = false;
+    }
+  });
+  return cabe;
+}
+
+// Las subidas con salario e IPC (decisión del usuario, 2 de noviembre de 2026): lo más bajo posible, con las dos subidas
+// como barras desde el 0, a la altura de las bolas, y el texto en blanco. Casi todas las bolas del alquiler quedan a la
+// derecha de las barras; en el precio de venta muchas caen encima, y por eso el texto va delante de las bolas, con un
+// borde oscuro para que se lea encima de ellas y fuera de la barra. Las demás cifras siguen con svgRango().
+function svgRangoSubida(gr, c, refs, titulo) {
+  const W = anchoGrafico(), alto = 15, n = c.i.length, estr = estrecha();
+  const pmax = Math.max(...c.i.map((k) => gr.pesos[k]));
+  const rmax = n > 60 ? (estr ? 9 : 12) : (estr ? 12 : 16);
+  const radio = (k) => Math.max(2.5, rmax * Math.sqrt(gr.pesos[k] / pmax));
+  const semi = Math.max(16, rmax);   // media altura de la franja: cada barra, con su texto, ocupa una mitad
+  // Eje: el 0 y las referencias siempre dentro; acaba en media raya de la última cifra, para no gastar ancho
+  const vals = c.v.concat(refs.map((r) => r.valor), [0]);
+  const paso = pasoEje(Math.max(...vals) - Math.min(...vals) || 1), medio = paso / 2;
+  const lo = Math.floor(Math.min(...vals) / medio) * medio, hi = Math.ceil(Math.max(...vals) / medio) * medio;
+  const d = paso < 1 ? 1 : 0, marcasEje = [];
+  for (let x = Math.ceil(lo / paso) * paso; x <= hi + 1e-9; x += paso) marcasEje.push([x, (x > 1e-9 ? "+" : "") + numero(Math.abs(x) < 1e-9 ? 0 : x, d) + c.unidad]);   // sin «-0%»
+  const izq = Math.max(12, anchoTexto(marcasEje[0][1]) / 2), der = Math.max(12, anchoTexto(marcasEje[marcasEje.length - 1][1]) / 2);
+  const sx = (x) => izq + ((x - lo) / (hi - lo)) * (W - izq - der);
+  // Rótulos de las bolas, en el menor número de filas posible
+  const rot = c.rotular.map((k) => { const j = c.i.indexOf(k); return { k, j, x: sx(c.v[j]), r: radio(k), nombre: gr.nombres[k], cifra: c.t[j] }; }).sort((a, b) => a.x - b.x);
+  const filasDe = (nf) => { const f = []; for (let q = 0; q < nf; q++) f.push({ lado: "a", q }, { lado: "b", q }); return f; };
+  const desvio = estr ? 90 : 120;
+  if (![1, 2, 3].some((nf) => colocarRotulos(rot, filasDe(nf), 2, W - 2, desvio))) colocarRotulos(rot, filasDe(3), 2, W - 2, Infinity);
+  const nArriba = Math.max(0, ...rot.filter((r) => r.lado === "a").map((r) => r.q + 1));
+  const nAbajo = Math.max(0, ...rot.filter((r) => r.lado === "b").map((r) => r.q + 1));
+  const y0 = Math.max(16, nArriba * alto + 5) + semi;
+  const yEje = y0 + semi + nAbajo * alto + 15, H = yEje + 4;
+  const yA = (q) => y0 - semi - 5 - q * alto, yB = (q) => y0 + semi + 13 + q * alto;
+  let s = "";
+  for (const [x, rotulo] of marcasEje) {
+    const cero = Math.abs(x) < 1e-9;
+    if (!cero) s += '<line x1="' + sx(x) + '" x2="' + sx(x) + '" y1="' + (y0 - semi) + '" y2="' + (yEje - 12) + '" stroke="' + REJILLA + '"/>';
+    s += '<text x="' + sx(x) + '" y="' + yEje + '" text-anchor="middle" font-size="12" font-weight="' + (cero ? 700 : 400) + '" fill="' + (cero ? TINTA : TINTA_SUAVE) + '">' + esc(rotulo) + "</text>";
+  }
+  // Barras detrás de las bolas; su texto, delante de todo (más abajo)
+  const x0 = sx(0);
+  let textos = "";
+  refs.forEach((r, q) => {
+    const y = q === 0 ? y0 - semi : y0 + 0.5, h = semi - 0.5, ancho = sx(r.valor) - x0;
+    s += '<rect x="' + Math.min(x0, x0 + ancho) + '" y="' + y + '" width="' + Math.abs(ancho) + '" height="' + h + '" fill="' + r.color + '"><title>' + esc(r.nombre + ": " + r.texto) + "</title></rect>";
+    const nombre = anchoTexto(r.nombre + " " + r.texto) * 0.93 < ancho - 8 ? r.nombre : r.corto;
+    textos += '<text x="' + (x0 + 6) + '" y="' + (y + h / 2 + 4) + '" font-size="12" fill="#fff" stroke="' + TINTA + '" stroke-width="3.5" paint-order="stroke" pointer-events="none">' +
+      esc(nombre) + ' <tspan font-weight="700">' + esc(r.texto) + "</tspan></text>";
+  });
+  s += '<line x1="' + x0 + '" x2="' + x0 + '" y1="' + (y0 - semi) + '" y2="' + (yEje - 12) + '" stroke="' + TINTA + '" stroke-width="1.5"/>';
+  s += '<line x1="' + sx(c.v[0]) + '" x2="' + sx(c.v[n - 1]) + '" y1="' + y0 + '" y2="' + y0 + '" stroke="#d9d7d0" stroke-width="6" stroke-linecap="round"/>';
+  const orden = c.i.map((k, j) => j).sort((a, b) => radio(c.i[b]) - radio(c.i[a]));
+  for (const j of orden) {
+    const k = c.i[j], cl = c.clases[c.k[j] - 1];
+    s += '<circle class="bola" cx="' + sx(c.v[j]) + '" cy="' + y0 + '" r="' + radio(k) + '" fill="' + (cl ? cl.color : SIN_DATO) +
+      '" fill-opacity="0.9" stroke="rgba(0,0,0,0.4)" stroke-width="0.75" data-codigo="' + gr.codigos[k] + '" data-et="' + esc(gr.nombres[k] + " " + c.t[j]) + '">' +
+      "<title>" + esc(gr.nombres[k] + ": " + c.t[j] + " (" + gr.textos_peso[k] + " habitantes)") + "</title></circle>";
+  }
+  const halo = ' stroke="#fff" stroke-width="3" paint-order="stroke"';
+  for (const r of rot) {
+    const arriba = r.lado === "a", yl = arriba ? yA(r.q) : yB(r.q);
+    s += '<line x1="' + r.x + '" x2="' + r.lx + '" y1="' + (arriba ? y0 - r.r : y0 + r.r) + '" y2="' + (arriba ? yl + 3 : yl - 11) + '" stroke="' + TINTA_SUAVE + '" stroke-width="0.75"/>' +
+      '<text x="' + r.lx + '" y="' + yl + '" text-anchor="middle" font-size="12" fill="' + TINTA + '"' + halo + ">" + esc(r.nombre) +
+      ' <tspan font-weight="700">' + esc(r.cifra) + "</tspan></text>";
+  }
+  return '<svg class="rango-svg" data-nivel="' + gr.nivel + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + s + textos +
+    '<g class="resaltes" pointer-events="none"></g></svg>';
+}
+
+// Leyenda de una sola línea, en todos los gráficos de bolas (decisión del usuario, 2 de noviembre de 2026): una tira con los
+// colores y los cortes de las clases, y la unidad una sola vez, al final. Si algún rótulo no es «de x a y», null (y va la leyenda de siempre).
+function leyendaTira(clases) {
+  const cortes = clases.map((x) => x.rotulo.match(/^(?:bajada [(])?de (.+?) a (.+?)[)]?$/));   // «bajada (de x a y)», la clase azul de las subidas
+  if (!cortes.length || cortes.some((m) => !m)) return null;
+  const todos = cortes.flatMap((m) => [m[1], m[2]]);
+  const unidad = (todos[0].match(/ [^\d ]+$|%$/) || [""])[0];
+  const comun = !!unidad && todos.every((x) => x.endsWith(unidad));
+  const corte = (x) => esc(comun ? x.slice(0, -unidad.length) : x);
+  return '<div class="tira-fila" role="img" aria-label="' + esc("Colores: " + clases.map((x) => x.rotulo).join("; ")) + '"><div class="tira-clases">' +
+    clases.map((x, j) => '<span style="background:' + x.color + '"><b>' + corte(cortes[j][1]) + "</b>" +
+      (j === clases.length - 1 ? '<b class="ultimo">' + corte(cortes[j][2]) + "</b>" : "") + "</span>").join("") + "</div>" +
+    (comun ? '<span class="tira-unidad">' + esc(unidad.trim()) + "</span>" : "") + "</div>";
+}
+
 // El gráfico de una cifra de `rangos`, con su leyenda, su tabla y sus notas; en las subidas, con la del salario y la del IPC
 function htmlRango(f, columna) {
-  const c = f.rangos.cifras[columna], gr = f.rangos.grupos[c.grupo], s = f.salarios;
+  const c = f.rangos.cifras[columna], s = f.salarios;
+  // Con una sola área (Ceuta, Ávila…) el JSON trae valores sueltos, no listas: sin esto, «Ceuta»[0] daba el nombre «C»
+  const gr = { ...f.rangos.grupos[c.grupo] };
+  for (const a of ["codigos", "nombres", "pesos", "textos_peso"]) gr[a] = [].concat(gr[a]);
   const refs = c.subida && s ? [
-    { valor: s.salario.variacion, texto: s.salario.texto, nombre: "Salario mediano (" + s.ambito + ")", color: "#3a3a38" },
-    { valor: s.ipc.variacion, texto: s.ipc.texto, nombre: "Precios (IPC de " + s.ipc.ambito + ")", color: "#8a8880" }] : [];
+    { valor: s.salario.variacion, texto: s.salario.texto, nombre: "Salario mediano (" + s.ambito + ")", corto: "Salario", color: "#3a3a38" },
+    { valor: s.ipc.variacion, texto: s.ipc.texto, nombre: "Precios (IPC de " + s.ipc.ambito + ")", corto: "IPC", color: "#6b6963" }] : [];
   const presentes = c.clases.filter((x, j) => c.k.indexOf(j + 1) >= 0);
-  const leyenda = '<div class="leyenda-meses">' + presentes.map((x) => '<span><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="' +
-    x.color + '" stroke="rgba(0,0,0,0.4)" stroke-width="0.75"/></svg> ' + esc(x.rotulo) + "</span>").join("") +
-    refs.map((r) => '<span><svg width="14" height="14" aria-hidden="true"><line x1="7" x2="7" y1="0" y2="14" stroke="' + r.color +
-      '" stroke-width="2" stroke-dasharray="3 2"/></svg> ' + esc(r.nombre + ": " + r.texto) + "</span>").join("") + "</div>";
+  const leyenda = leyendaTira(c.clases) || '<div class="leyenda-meses">' + presentes.map((x) => '<span><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="' +
+    x.color + '" stroke="rgba(0,0,0,0.4)" stroke-width="0.75"/></svg> ' + esc(x.rotulo) + "</span>").join("") + "</div>";
   const filas = c.i.map((k, j) => j).sort((a, b) => c.v[b] - c.v[a]).map((j) => {
     const k = c.i[j];
     return ['<a href="' + direccion(gr.nivel, gr.codigos[k]) + '">' + esc(gr.nombres[k]) + "</a>", esc(c.t[j]), esc(gr.textos_peso[k])];
   });
   const tabla = tablaHtml(["Área", "Cifra", "Habitantes"], filas);
   let notas = c.notas.slice();
-  if (refs.length) notas.push("Líneas discontinuas: la subida del salario mediano y la de los precios, de " + s.anio_inicio + " a " + s.anio_fin + ".", ...notasSalarioIpc(s));
+  if (refs.length) notas.push("Barras oscuras, desde cero: la subida del salario mediano (" + s.salario.texto + ", " + s.ambito + ") y la de los precios (" + s.ipc.texto + ", IPC de " + s.ipc.ambito + "), de " + s.anio_inicio + " a " + s.anio_fin + ".", ...notasSalarioIpc(s));
   notas = notas.filter((x, j) => notas.indexOf(x) === j);
   // Las notas y la fuente, plegadas: son muchas (pedido por el usuario el 24 de octubre de 2026)
   const pie = plegado("Cómo leer el gráfico, notas y fuente", '<ul class="notas">' + notas.map((x) => "<li>" + esc(x) + "</li>").join("") +
     "<li>Fuente: " + esc(c.fuente) + ".</li></ul>");
-  return htmlGrafico(c.titulo, svgRango(gr, c, refs, c.titulo), tabla, [], null, leyenda, pie);
+  return htmlGrafico(c.titulo, refs.length ? svgRangoSubida(gr, c, refs, c.titulo) : svgRango(gr, c, refs, c.titulo), tabla, [], null, leyenda, pie);
 }
 // La cifra y, debajo, la que va con ella (la subida con el precio de 2024, y al revés)
 function htmlRangos(f, columna) {
@@ -1683,7 +1804,7 @@ function seguirRuta() {
   }
   const q = new URLSearchParams(consulta || "");
   if (q.get("tema") && estado.temas.temas.some((t) => t.id === q.get("tema"))) estado.tema = q.get("tema");
-  if (q.get("v")) estado.columna = q.get("v");
+  if (q.get("v")) { estado.columna = q.get("v"); estado.columnaAuto = false; }
   const [nivel, codigo] = partes;
   if (NIVELES.indexOf(nivel) >= 0 && /^\d{2,10}$/.test(codigo || "")) {
     adelantarMapa(nivel, codigo);

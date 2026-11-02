@@ -226,6 +226,14 @@ html, body { overflow-x: hidden; }
 .tarjeta.elegida .detalle { font-size: 15px; color: var(--tinta); }
 .tarjeta.elegida .nota-rango { font-size: 12px; color: var(--tinta-suave); margin-top: 4px; }
 .rango-svg circle.bola { cursor: pointer; }
+/* Leyenda de los gráficos de bolas: una tira con los colores y, debajo, los cortes; la unidad, al final */
+.tira-fila { display: flex; align-items: flex-start; gap: 6px; max-width: 480px; margin: 6px 0 22px; }
+.tira-unidad { font-size: 11px; color: var(--tinta-suave); padding-top: 10px; white-space: nowrap; }   /* a la altura de los cortes */
+.tira-clases { display: flex; flex: 1; margin-right: 20px; }   /* sitio para la mitad del último corte */
+.tira-clases span { position: relative; flex: 1; height: 8px; }
+.tira-clases b { position: absolute; left: 0; top: 10px; transform: translateX(-50%); font-size: 11px; font-weight: 400; color: var(--tinta-suave); white-space: nowrap; }
+.tira-clases span:first-child b:first-child { transform: none; }
+.tira-clases b.ultimo { left: auto; right: 0; transform: translateX(50%); }
 button.tarjeta { cursor: pointer; }
 button.tarjeta:hover { border-color: var(--borde); background: var(--fondo); }
 .tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin: 8px 0 16px; }
