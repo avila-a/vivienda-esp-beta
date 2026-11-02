@@ -67,6 +67,52 @@ const sinFecha = (titulo, fecha) => {
 };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// Los nombres, como se leen, solo para enseñarlos (decisión del usuario, 2 de noviembre de 2026): el INE escribe «Coruña, A», y así
+// siguen las tablas y las descargas. Las mismas reglas que nombre_natural() en paginas_lugares.R. Se puede aplicar dos veces.
+const nombreNatural = (x) => x.split("/").map((p) => {
+  const i = p.lastIndexOf(", ");
+  return i < 0 ? p : p.slice(i + 2) + " " + p.slice(0, i);
+}).join("/").replace(/' /g, "'");
+const LUGAR_TRAS_DE = /^((?:Municipios|Distritos|Secciones censales|Provincia|provincia|Distrito|Sección censal)(?: de la provincia)? de )(.+?)( \(.*\))?$/;
+const lugarTrasDe = (m) => m[1] + nombreNatural(m[2]) + (m[3] || "");
+// Un nombre, o un título con nombre: «Provincia: Coruña, A», «Distrito 1503001 (Coruña, A)», «Provincia de Coruña, A (su capital)»
+function textoLugar(t) {
+  if (!t) return t;
+  let m = /^(.*\()([^()]*, [^()]*)(\).*)$/.exec(t);
+  if (m) return m[1] + nombreNatural(m[2]) + m[3];
+  m = /^([^:]+: )(.+)$/.exec(t);
+  if (m) return m[1] + nombreNatural(m[2]);
+  m = LUGAR_TRAS_DE.exec(t);
+  return m ? lugarTrasDe(m) : nombreNatural(t);
+}
+// El título de una capa del mapa: solo si lleva un lugar («Municipios de la provincia de Coruña, A»)
+const tituloCapa = (t) => { const m = LUGAR_TRAS_DE.exec(t || ""); return m ? lugarTrasDe(m) : t; };
+// Lo que la ficha enseña con nombres de lugares. No toca f.titulo (lo comprueba revisar.R) ni f.area
+function nombresLegibles(f) {
+  // Una lista de un solo elemento puede llegar sin lista (al preparar los datos): no cambia lo que se enseña, pero no se puede recorrer
+  const lista = (x) => (x == null ? [] : [].concat(x));
+  lista(f.ruta).forEach((r) => { r.titulo = textoLugar(r.titulo); });
+  lista(f.contexto && f.contexto.areas).forEach((a) => { a.titulo = textoLugar(a.titulo); });
+  if (f.salarios) f.salarios.ambito = textoLugar(f.salarios.ambito);
+  if (f.salarios && f.salarios.ipc) f.salarios.ipc.ambito = textoLugar(f.salarios.ipc.ambito);
+  // «Extranjeros, Madrid, Comunidad de»: el Notariado, por comunidad
+  const notariado = f.series && f.series.notariado;
+  if (notariado) lista(notariado.lineas).concat(lista(notariado.solo_tabla)).forEach((l) => {
+    const m = /^(Extranjeros, )(.+)$/.exec(l.etiqueta || "");
+    if (m) l.etiqueta = m[1] + nombreNatural(m[2]);
+  });
+  const temporada = f.series && f.series.temporada;
+  if (temporada) lista(temporada.filas).forEach((x) => { x.titulo = textoLugar(x.titulo); });
+  // Con un solo lugar, `nombres` es un texto, y así tiene que seguir
+  Object.values((f.rangos && f.rangos.grupos) || {}).forEach((g) => {
+    if (Array.isArray(g.nombres)) g.nombres = g.nombres.map(textoLugar);
+    else if (g.nombres) g.nombres = textoLugar(g.nombres);
+  });
+  lista(f.bloques).forEach((b) => lista(b.cifras).forEach((c) => {
+    const m = c.rango && c.rango.detalle && /^De (.+?) a (.+), (entre sus .*)$/.exec(c.rango.detalle);
+    if (m) c.rango.detalle = "De " + nombreNatural(m[1]) + " a " + nombreNatural(m[2]) + ", " + m[3];
+  }));
+}
 const estrecha = () => window.matchMedia("(max-width: 899px)").matches;
 const colorTema = (columna) => { for (const [re, c] of COLOR_TEMA) if (re.test(columna)) return c; return "#8a8880"; };
 // Texto sobre un fondo de color: blanco o tinta, el que contraste más (luminancia relativa de WCAG)
@@ -376,11 +422,11 @@ function estilo(feature) {
 function textoTooltip(p, capital) {
   const j = indiceVariable();
   const v = j ? estado.meta.variables[j - 1] : null;
-  let h = "<strong>" + esc(p.titulo) + "</strong>";
-  if (capital && estado.meta.nivel !== "municipio") h += "<br>Capital: " + esc(capital.nombre);
+  let h = "<strong>" + esc(textoLugar(p.titulo)) + "</strong>";
+  if (capital && estado.meta.nivel !== "municipio") h += "<br>Capital: " + esc(textoLugar(capital.nombre));
   if (v) h += "<br>" + esc(v.titulo) + ": " + esc(p["x" + j]);
   if (v && p["a" + j]) h += '<br><span class="marca-aviso">⚠ ' + esc(p["a" + j]) + "</span>";
-  if (capital) h += "<br>Población de " + esc(capital.nombre) + ": " + esc(capital.texto_poblacion) + " habitantes";
+  if (capital) h += "<br>Población de " + esc(textoLugar(capital.nombre)) + ": " + esc(capital.texto_poblacion) + " habitantes";
   return h;
 }
 
@@ -425,6 +471,7 @@ async function verGrupo(grupo, encuadrarSiempre) {
     if (estado.capaHuecos) { estado.capaHuecos.remove(); estado.capaHuecos = null; }
     estado.grupo = grupo;
     estado.meta = datos.meta;
+    estado.meta.titulo = tituloCapa(estado.meta.titulo);
     estado.porCodigo.clear();
     // Sin fondo en el mapa de provincias: Canarias va desplazada y no coincidiría con las calles
     if (datos.meta.canarias_desplazada) estado.fondo.remove();
@@ -531,7 +578,7 @@ function pintarLeyenda() {
   h += "<p>Datos: " + esc([v.fuente, v.fecha].filter(Boolean).join(", ")) + ".</p>";
   h += citaDe(v.columna, m.cita_insideairbnb);
   if (f && m.sin_contorno.indexOf(f.codigo) >= 0) {
-    h += '<p class="marca-aviso">' + esc(f.titulo) + " no está en el mapa: no tiene contorno en el Censo 2021.</p>";
+    h += '<p class="marca-aviso">' + esc(textoLugar(f.titulo)) + " no está en el mapa: no tiene contorno en el Censo 2021.</p>";
   }
   $("leyenda").innerHTML = h;
 }
@@ -726,6 +773,23 @@ function marco(W, H, m, ymax, fmtY, x0, x1, sx, pasoX) {
   return { g, sy };
 }
 
+// Texto alternativo de los gráficos (decisión del usuario, 2 de noviembre de 2026; A7 y texto alternativo en indexacion.md):
+// el título y lo que enseña el gráfico, para los lectores de pantalla y para Google, que pide <title> en los SVG. Solo
+// describe ese gráfico y usa los textos que ya dibuja. Una cifra con aviso va con su aviso.
+const ALT_ALQUILER = "Alquiler: mediana de los contratos de pisos en vigor declarados a Hacienda; no es un índice de precios.";
+const ALT_VENTA = "Precio de venta: media de lo vendido ante notario; no es un índice de precios.";
+let numSvg = 0;
+function abrirSvg(W, H, titulo, detalle, atributos) {
+  const id = "svg-titulo-" + (++numSvg);
+  return "<svg " + (atributos || "") + 'viewBox="0 0 ' + W + " " + H + '" role="img" aria-labelledby="' + id + '"><title id="' + id + '">' +
+    esc(detalle ? titulo + ". " + detalle : titulo) + "</title>";
+}
+const conAviso = (texto, avisos) => texto + (avisos && avisos.length ? " (⚠ " + avisos.join("; ") + ")" : "");
+const avisosDeCifra = (columna) => { const x = estado.cifras.get(columna); return x && x.avisos ? [].concat(x.avisos).map((i) => estado.ficha.avisos[i]) : []; };
+// Las vacías probablemente salen de más en estas zonas (misma lista que 3z y paginas_lugares.R): el texto alternativo no da su cifra
+const VACIAS_DE_MAS = { provincia: ["35", "38", "15", "27", "32", "36", "01", "20", "48"], ccaa: ["05", "12", "16"] };
+const vaciasDeMas = (f) => f.nivel === "municipio" ? VACIAS_DE_MAS.provincia.indexOf(f.area.cod_provincia) >= 0 : (VACIAS_DE_MAS[f.nivel] || []).indexOf(f.codigo) >= 0;
+
 // `pie`: HTML que va al final (la cita de elDiario.es)
 function htmlGrafico(titulo, svg, tabla, notas, fuente, extra, pie) {
   return '<section class="grafico"><h2>' + esc(titulo) + "</h2>" + (extra || "") + svg +
@@ -767,7 +831,11 @@ function htmlSerieTuristicas(s, medida) {
     marcaPunto(MESES[mm].forma, 7, 7, MESES[mm].color, "") + "</svg> " + mm + "</span>").join("") + "</div>";
   const titulo = medida === "pct" ? "Viviendas turísticas, en % de las viviendas" : medida === "por100" ? "Viviendas turísticas por cada cien alquiladas" :
     medida === "por100p" ? "Viviendas turísticas por cada cien habitadas" : "Viviendas turísticas";
-  const svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + g + "</svg>";
+  // La última medición y la primera del mismo mes: es estacional, y solo se compara el mismo mes
+  const ultimaT = pts[pts.length - 1], primeraT = pts.find((d) => d.p.mes === ultimaT.p.mes);
+  const extremos = primeraT === ultimaT ? [ultimaT] : [primeraT, ultimaT];
+  const detalle = extremos.map((d) => conAviso(d.p.mes + " de " + d.p.anio + ": " + d.et, avisoDe(d.p) ? [avisoDe(d.p)] : [])).join("; ") + ".";
+  const svg = abrirSvg(W, H, titulo, detalle) + g + "</svg>";
   const tabla = tablaHtml(["Medición", "Viviendas turísticas", "% de las viviendas", "Por cada cien habitadas", "Por cada cien alquiladas", "Aviso"],
     s.puntos.map((p) => [p.mes + " de " + p.anio, esc(p.texto), esc(p.texto_pct), esc(p.texto_por100p), esc(p.texto_por100),
       [p.aviso, p.aviso_por100].filter(Boolean).map((a) => "⚠ " + esc(a)).join("; ")]));
@@ -800,14 +868,16 @@ function htmlSerieAlquiler(s, medida) {
   const rotular = [pts.find((d) => d.x === 2015), pts[pts.length - 1]].filter((d, i, a) => d && a.indexOf(d) === i);
   for (const q of rotular) g += '<text x="' + Math.min(Math.max(sx(q.x), m.izq + 20), W - m.der) + '" y="' + (sy(q.y) - 10) + '" text-anchor="' +
     (q.x === x1 ? "end" : "middle") + '" font-size="12" font-weight="600" fill="' + TINTA + '">' + esc(q.et) + "</text>";
-  const svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + g + "</svg>";
+  const avisosSerie = avisosDeCifra("alquiler_" + medida + "_variacion_pct_2015_2024");
+  const svg = abrirSvg(W, H, titulo, conAviso(rotular.map((q) => q.x + ": " + q.et).join("; "), avisosSerie) + ". " + ALT_ALQUILER) + g + "</svg>";
   const tabla = tablaHtml(["Año", "Al mes", "Por m²", "Pisos en la muestra"],
     s.puntos.map((p) => [p.anio, esc(p.texto_mes), esc(p.texto_m2), p.pisos.toLocaleString("es-ES")]));
   return htmlGrafico(titulo, svg, tabla, s.notas, s.fuente);
 }
 
-// Barras horizontales, cada una con su rótulo encima y su cifra al final; para comparaciones y subidas
-function svgBarras(filas, titulo) {
+// Barras horizontales, cada una con su rótulo encima y su cifra al final; para comparaciones y subidas.
+// `nota`: lo que hay que decir de sus cifras en el texto alternativo; `soloTitulo`: sin cifras en él
+function svgBarras(filas, titulo, nota, soloTitulo) {
   const W = anchoGrafico(), izq = 8, der = 70, alto = 40;
   const H = filas.length * alto + 8;
   const vals = filas.map((f) => f.valor);
@@ -823,7 +893,8 @@ function svgBarras(filas, titulo) {
     g += '<text x="' + (neg ? a - 6 : b + 6) + '" y="' + (y + 30) + '" text-anchor="' + (neg ? "end" : "start") + '" font-size="13" font-weight="600" fill="' + TINTA + '">' + esc(f.texto) + "</text>";
   });
   if (lo < 0) g += '<line x1="' + sx(0) + '" x2="' + sx(0) + '" y1="0" y2="' + H + '" stroke="' + TINTA_SUAVE + '"/>';
-  return '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + g + "</svg>";
+  const detalle = soloTitulo ? "" : filas.map((f) => conAviso(f.etiqueta + ": " + f.texto, f.avisos)).join("; ") + "." + (nota ? " " + nota : "");
+  return abrirSvg(W, H, titulo, detalle) + g + "</svg>";
 }
 
 // El lugar frente a las áreas que lo contienen y España. `mas`: notas y HTML del final propios de la cifra (las
@@ -840,7 +911,7 @@ function htmlComparar(f, columna, mas) {
     if (x.valor == null) return;
     const area = f.contexto.areas[k];
     filas.push({ etiqueta: (k === 0 ? "" : "") + corto(area.titulo), valor: x.valor, texto: x.texto, destacada: k === 0,
-      color: k === 0 ? colorTema(columna) : GRIS, enlace: area.enlace });
+      color: k === 0 ? colorTema(columna) : GRIS, enlace: area.enlace, avisos: k === 0 ? avisosDeCifra(columna) : [] });
   });
   const notas = ["Barras: este lugar (en color) y las áreas que lo contienen, hasta España (en gris). Cada área, con la cifra de su tabla; sus avisos, en su ficha."].concat(mas.notas || []);
   const fecha = conPeriodo(c.fecha, f.contexto.areas.map((a) => a.periodo));
@@ -851,7 +922,8 @@ function htmlComparar(f, columna, mas) {
     const a = f.contexto.areas[k];
     return [k === 0 ? esc(a.titulo) : '<a href="' + direccion(a.nivel, a.enlace.split("/").pop()) + '">' + esc(a.titulo) + "</a>", esc(x.texto)];
   }));
-  return htmlGrafico(titulo, svgBarras(filas, titulo), tabla, notas, [c.fuente, fecha].filter(Boolean).join(", "), "", cita);
+  const sinCifras = /vacias/.test(columna) && vaciasDeMas(f);
+  return htmlGrafico(titulo, svgBarras(filas, titulo, null, sinCifras), tabla, notas, [c.fuente, fecha].filter(Boolean).join(", "), "", cita);
 }
 
 // Subidas del alquiler, del salario mediano y de los precios, de 2015 a 2024 (euros de cada año)
@@ -863,7 +935,7 @@ function htmlVariacion(f, columna) {
     { x: mes, etiqueta: "Alquiler al mes (pisos)", columna: "alquiler_mes_variacion_pct_2015_2024" }];
   alquileres.sort((a, b) => (b.columna === columna) - (a.columna === columna));
   for (const a of alquileres) if (a.x && a.x.valor != null) filas.push({ etiqueta: a.etiqueta, valor: a.x.valor, texto: a.x.texto,
-    color: a.columna === columna ? colorTema("alquiler") : "#f5b08f", destacada: a.columna === columna });
+    color: a.columna === columna ? colorTema("alquiler") : "#f5b08f", destacada: a.columna === columna, avisos: avisosDeCifra(a.columna) });
   if (!s) return "";
   const conAlquiler = filas.length > 0;
   filas.push({ etiqueta: "Salario mediano (" + s.ambito + ")", valor: s.salario.variacion, texto: s.salario.texto, color: "#3a3a38" });
@@ -880,7 +952,7 @@ function htmlVariacion(f, columna) {
   notas.push(...notasSalarioIpc(s),
     "El alquiler es la mediana de los alquileres de pisos en vigor declarados a Hacienda (Ministerio de Vivienda): lo que pagan quienes ya tienen contrato, no el precio de los contratos nuevos. No es un índice de precios y la base crece de un año a otro.");
   if (s.nota) notas.push(s.nota);
-  return htmlGrafico(titulo, svgBarras(filas, titulo), tabla, notas, null);
+  return htmlGrafico(titulo, svgBarras(filas, titulo, conAlquiler ? ALT_ALQUILER : null), tabla, notas, null);
 }
 
 // Notas del salario y del IPC, en las subidas del alquiler y del precio de venta
@@ -928,7 +1000,9 @@ function svgLineas(lineas, x0, x1, paso, fmtY, titulo, rotular) {
     (sx(q.x) > W - m.der - 30 ? "end" : "middle") + '" font-size="12" font-weight="600" fill="' + TINTA + '" stroke="#fff" stroke-width="3" paint-order="stroke">' + esc(q.et) + "</text>";
   const leyenda = lineas.length > 1 ? '<div class="leyenda-meses">' + lineas.map((l) => '<span><svg width="14" height="14" aria-hidden="true"><line x1="0" x2="14" y1="7" y2="7" stroke="' +
     l.color + '" stroke-width="3"/></svg> ' + esc(l.nombre) + "</span>").join("") + "</div>" : "";
-  return leyenda + '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + g + "</svg>";
+  // Con varias líneas, de cuál son los puntos rotulados
+  const detalle = (lineas.length > 1 ? lineas[0].nombre + ": " : "") + primera.map((q) => q.nombre + ": " + q.et).join("; ") + ".";
+  return leyenda + abrirSvg(W, H, titulo, detalle) + g + "</svg>";
 }
 
 // Precio de venta, cada año de la serie: una línea; medida = m2 o medio
@@ -960,7 +1034,7 @@ function htmlVariacionVenta(f, medida) {
   const filas = [];
   for (const m of orden) {
     const x = cifra(m, "variacion_pct_A0_A1");
-    if (x && x.valor != null) filas.push({ etiqueta: nombres[m], valor: x.valor, texto: x.texto, color: m === medida ? colorTema("precio_venta") : AZUL_CLARO, destacada: m === medida });
+    if (x && x.valor != null) filas.push({ etiqueta: nombres[m], valor: x.valor, texto: x.texto, color: m === medida ? colorTema("precio_venta") : AZUL_CLARO, destacada: m === medida, avisos: avisosDeCifra(x.columna) });
   }
   filas.push({ etiqueta: "Salario mediano (" + s.ambito + ")", valor: s.salario.variacion, texto: s.salario.texto, color: "#3a3a38" });
   filas.push({ etiqueta: "Precios (IPC de " + s.ipc.ambito + ")", valor: s.ipc.variacion, texto: s.ipc.texto, color: "#8a8880" });
@@ -970,7 +1044,7 @@ function htmlVariacionVenta(f, medida) {
       ["Índice de precios de consumo (media anual; 2025 = 100; " + esc(s.ipc.ambito) + ")", numero(s.ipc.inicio, 1), numero(s.ipc.fin, 1), "—", esc(s.ipc.texto)]]));
   const notas = [NOTA_VENTA].concat(notasSalarioIpc(s));
   if (s.nota) notas.push(s.nota);
-  return htmlGrafico(titulo, svgBarras(filas, titulo), tabla, notas, null, "", pie);
+  return htmlGrafico(titulo, svgBarras(filas, titulo, ALT_VENTA), tabla, notas, null, "", pie);
 }
 
 // Compras por no residentes, cada año de la serie: dos líneas, todos los no residentes y los extranjeros no residentes
@@ -1082,8 +1156,10 @@ function htmlConstruccion(s, columna) {
       '<text x="' + (sx(a1) + ancho / 2) + '" y="' + (y - 6) + '" text-anchor="end" font-size="12" font-weight="600" fill="' + TINTA + '" stroke="#fff" stroke-width="3" paint-order="stroke">' +
       (deProtegidas ? "media de protegidas " : "media ") + a0 + "–" + a1 + ": " + esc(media.texto) + "</text>";
   }
-  const svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(s.titulo) + '">' + g + "</svg>";
-  const cuadro = (c) => '<svg width="14" height="14" aria-hidden="true"><rect width="14" height="14" fill="' + c + '"/></svg> ';
+  // La media, solo la del Ministerio: la del Catastro tendría que decir que su último año se supone incompleto (lo dicen las notas)
+  const detalleMedia = media && media.valor != null && anios && s.tipo === "ministerio" ? (deProtegidas ? "Media de protegidas " : "Media ") + anios[1] + "–" + anios[2] + ": " + media.texto + "." : "";
+  const svg = abrirSvg(W, H, s.titulo, detalleMedia) + g + "</svg>";
+  const cuadro =(c) => '<svg width="14" height="14" aria-hidden="true"><rect width="14" height="14" fill="' + c + '"/></svg> ';
   const leyenda = apiladas ? '<div class="leyenda-meses"><span>' + cuadro(VERDE_PROTEGIDAS) + "Protegidas (calificación definitiva)</span><span>" + cuadro(color) + "Libres</span></div>" : "";
   const tabla = apiladas
     ? tablaHtml(["Año", "Libres", "Protegidas", "Total"], s.anios.map((a, i) => [a, esc(s.textos_libres[i]), esc(s.textos_protegidas[i]), esc(s.textos[i])]))
@@ -1139,7 +1215,8 @@ function htmlTemporada(s) {
     g += '<text x="' + (xi - 3) + '" y="' + (yl - 10) + '" text-anchor="end" font-size="12" fill="' + TINTA + '"' + halo + ">" + esc(ti) + "</text>" +
       '<text x="' + (xd + 3) + '" y="' + (yl - 10) + '" font-size="12" font-weight="600" fill="' + TINTA + '"' + halo + ">" + esc(td) + "</text>";
   });
-  const svg = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + g + "</svg>";
+  const detalleTemporada = s.filas.map((r) => r.titulo + ": " + r.texto_antes + " en " + s.periodos[0] + " y " + r.texto_despues + " en " + s.periodos[1]).join("; ") + ".";
+  const svg = abrirSvg(W, H, titulo, detalleTemporada) + g + "</svg>";
   const c = colorTema("anuncios_");
   const leyenda = '<div class="leyenda-meses"><span><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="#fff" stroke="' + c + '" stroke-width="2"/></svg> ' +
     esc(s.periodos[0]) + '</span><span><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="' + c + '"/></svg> ' + esc(s.periodos[1]) +
@@ -1159,7 +1236,7 @@ function htmlTemporada(s) {
 // cualquier cifra que preparar_datos.R dé en `rangos` (ver «Rangos» allí). Al pasar por una bola se marca su área en el
 // mapa, y al pasar por el mapa, su bola (marcarEnRangos). Las subidas con salario e IPC van con svgRangoSubida().
 const anchoTexto = (s) => s.length * 6.4 + 6;   // ancho aproximado de un texto de 12 px
-function svgRango(gr, c, refs, titulo) {
+function svgRango(gr, c, refs, titulo, detalle) {
   const W = anchoGrafico(), alto = 15;
   const n = c.i.length;
   const pmax = Math.max(...c.i.map((k) => gr.pesos[k]));
@@ -1191,11 +1268,12 @@ function svgRango(gr, c, refs, titulo) {
   }
   const nArriba = Math.max(0, ...rot.filter((r) => r.fila % 2 === 0).map((r) => r.fila / 2 + 1));
   const nAbajo = Math.max(0, ...rot.filter((r) => r.fila % 2 === 1).map((r) => (r.fila + 1) / 2));
-  const y0 = 18 + nArriba * alto + rmax + 6;   // arriba, sitio para el rótulo de la bola marcada
+  const tira = tiraClases(c, sx, lo, hi, W);
+  const y0 = tira.alto + 18 + nArriba * alto + rmax + 6;   // arriba, sitio para el rótulo de la bola marcada
   const yArriba = (q) => y0 - rmax - 8 - q * alto, yAbajo = (q) => y0 + rmax + 18 + q * alto;
   const yEje = y0 + rmax + 10 + nAbajo * alto + 14;
   const H = yEje + 6;
-  let s = "";
+  let s = tira.svg;
   for (const [x, rotulo] of marcasEje) {
     s += '<line x1="' + sx(x) + '" x2="' + sx(x) + '" y1="' + (y0 - rmax - 2) + '" y2="' + (y0 + rmax + 2) + '" stroke="' + (Math.abs(x) < 1e-9 && lo < 0 ? TINTA_SUAVE : REJILLA) + '"/>' +
       '<text x="' + sx(x) + '" y="' + yEje + '" text-anchor="middle" font-size="12" fill="' + TINTA_SUAVE + '">' + esc(rotulo) + "</text>";
@@ -1218,7 +1296,7 @@ function svgRango(gr, c, refs, titulo) {
       '<text x="' + r.lx + '" y="' + yb + '" text-anchor="middle" font-size="12" fill="' + TINTA + '"' + halo + ">" + esc(r.nombre) +
       ' <tspan font-weight="700">' + esc(r.cifra) + "</tspan></text>";
   }
-  return '<svg class="rango-svg" data-nivel="' + gr.nivel + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + s +
+  return abrirSvg(W, H, titulo, detalle, 'class="rango-svg" data-nivel="' + gr.nivel + '" ') + s +
     '<g class="resaltes" pointer-events="none"></g></svg>';
 }
 
@@ -1246,7 +1324,7 @@ function colocarRotulos(rot, filas, izq, limite, maxDesvio) {
 // como barras desde el 0, a la altura de las bolas, y el texto en blanco. Casi todas las bolas del alquiler quedan a la
 // derecha de las barras; en el precio de venta muchas caen encima, y por eso el texto va delante de las bolas, con un
 // borde oscuro para que se lea encima de ellas y fuera de la barra. Las demás cifras siguen con svgRango().
-function svgRangoSubida(gr, c, refs, titulo) {
+function svgRangoSubida(gr, c, refs, titulo, detalle) {
   const W = anchoGrafico(), alto = 15, n = c.i.length, estr = estrecha();
   const pmax = Math.max(...c.i.map((k) => gr.pesos[k]));
   const rmax = n > 60 ? (estr ? 9 : 12) : (estr ? 12 : 16);
@@ -1267,10 +1345,11 @@ function svgRangoSubida(gr, c, refs, titulo) {
   if (![1, 2, 3].some((nf) => colocarRotulos(rot, filasDe(nf), 2, W - 2, desvio))) colocarRotulos(rot, filasDe(3), 2, W - 2, Infinity);
   const nArriba = Math.max(0, ...rot.filter((r) => r.lado === "a").map((r) => r.q + 1));
   const nAbajo = Math.max(0, ...rot.filter((r) => r.lado === "b").map((r) => r.q + 1));
-  const y0 = Math.max(16, nArriba * alto + 5) + semi;
+  const tira = tiraClases(c, sx, lo, hi, W);
+  const y0 = tira.alto + Math.max(16, nArriba * alto + 5) + semi;
   const yEje = y0 + semi + nAbajo * alto + 15, H = yEje + 4;
   const yA = (q) => y0 - semi - 5 - q * alto, yB = (q) => y0 + semi + 13 + q * alto;
-  let s = "";
+  let s = tira.svg;
   for (const [x, rotulo] of marcasEje) {
     const cero = Math.abs(x) < 1e-9;
     if (!cero) s += '<line x1="' + sx(x) + '" x2="' + sx(x) + '" y1="' + (y0 - semi) + '" y2="' + (yEje - 12) + '" stroke="' + REJILLA + '"/>';
@@ -1302,23 +1381,47 @@ function svgRangoSubida(gr, c, refs, titulo) {
       '<text x="' + r.lx + '" y="' + yl + '" text-anchor="middle" font-size="12" fill="' + TINTA + '"' + halo + ">" + esc(r.nombre) +
       ' <tspan font-weight="700">' + esc(r.cifra) + "</tspan></text>";
   }
-  return '<svg class="rango-svg" data-nivel="' + gr.nivel + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(titulo) + '">' + s + textos +
+  return abrirSvg(W, H, titulo, detalle, 'class="rango-svg" data-nivel="' + gr.nivel + '" ') + s + textos +
     '<g class="resaltes" pointer-events="none"></g></svg>';
 }
 
-// Leyenda de una sola línea, en todos los gráficos de bolas (decisión del usuario, 2 de noviembre de 2026): una tira con los
-// colores y los cortes de las clases, y la unidad una sola vez, al final. Si algún rótulo no es «de x a y», null (y va la leyenda de siempre).
-function leyendaTira(clases) {
-  const cortes = clases.map((x) => x.rotulo.match(/^(?:bajada [(])?de (.+?) a (.+?)[)]?$/));   // «bajada (de x a y)», la clase azul de las subidas
-  if (!cortes.length || cortes.some((m) => !m)) return null;
-  const todos = cortes.flatMap((m) => [m[1], m[2]]);
-  const unidad = (todos[0].match(/ [^\d ]+$|%$/) || [""])[0];
-  const comun = !!unidad && todos.every((x) => x.endsWith(unidad));
-  const corte = (x) => esc(comun ? x.slice(0, -unidad.length) : x);
-  return '<div class="tira-fila" role="img" aria-label="' + esc("Colores: " + clases.map((x) => x.rotulo).join("; ")) + '"><div class="tira-clases">' +
-    clases.map((x, j) => '<span style="background:' + x.color + '"><b>' + corte(cortes[j][1]) + "</b>" +
-      (j === clases.length - 1 ? '<b class="ultimo">' + corte(cortes[j][2]) + "</b>" : "") + "</span>").join("") + "</div>" +
-    (comun ? '<span class="tira-unidad">' + esc(unidad.trim()) + "</span>" : "") + "</div>";
+// Leyenda de los gráficos de bolas (decisión del usuario, 2 de noviembre de 2026): una tira de colores dentro del gráfico, en
+// la misma escala que las bolas, de modo que cada color queda encima de sus bolas. Clases de la cifra, con sus cortes en número;
+// null si algún rótulo no es «de x a y» o «bajada (de x a y)», y entonces va la leyenda de siempre.
+function clasesDeTira(clases) {
+  const numero = (x) => { const m = x.match(/-?[\d.]+(?:,\d+)?/); return m ? +m[0].replace(/\./g, "").replace(",", ".") : NaN; };
+  const sinUnidad = (x) => x.replace(/ [^\d ]+$|%$/, "");
+  const filas = clases.map((x) => {
+    const m = x.rotulo.match(/^(?:bajada [(])?de (.+?) a (.+?)[)]?$/);
+    return m && { color: x.color, rotulo: x.rotulo, de: numero(m[1]), a: numero(m[2]), texto_de: sinUnidad(m[1]), texto_a: sinUnidad(m[2]) };
+  });
+  return filas.length && filas.every((f) => f && isFinite(f.de) && isFinite(f.a)) ? filas : null;
+}
+// La tira y sus cortes, solo lo que cae dentro del eje (en una provincia, las clases son las de toda España). Los cortes que no
+// caben se omiten, salvo el último: la unidad y la escala están en el eje de abajo, y las clases, en la leyenda del mapa.
+function tiraClases(c, sx, lo, hi, W) {
+  const filas = clasesDeTira(c.clases);
+  if (!filas) return { svg: "", alto: 0 };
+  let s = "";
+  const cortes = [];
+  filas.forEach((f, j) => {
+    const a = Math.max(f.de, lo), b = Math.min(f.a, hi);
+    if (b > a) s += '<rect x="' + sx(a) + '" y="1" width="' + Math.max(1, sx(b) - sx(a)) + '" height="8" fill="' + f.color + '"><title>' + esc(f.rotulo) + "</title></rect>";
+    if (f.de >= lo && f.de <= hi) cortes.push({ v: f.de, t: f.texto_de });
+    if (j === filas.length - 1 && f.a >= lo && f.a <= hi) cortes.push({ v: f.a, t: f.texto_a });
+  });
+  if (!s) return { svg: "", alto: 0 };
+  const puestos = [];
+  cortes.forEach((q, j) => {
+    q.w = q.t.length * 5.6 + 4;
+    q.x = Math.min(Math.max(sx(q.v), q.w / 2), W - q.w / 2);
+    const pisa = () => puestos.length && q.x - q.w / 2 < puestos[puestos.length - 1].x + puestos[puestos.length - 1].w / 2 + 3;
+    if (j === cortes.length - 1) { while (pisa()) puestos.pop(); }
+    else if (pisa()) return;
+    puestos.push(q);
+  });
+  for (const q of puestos) s += '<text class="corte-tira" x="' + q.x + '" y="20" text-anchor="middle" font-size="11" fill="' + TINTA_SUAVE + '">' + esc(q.t) + "</text>";
+  return { svg: s, alto: 24 };
 }
 
 // El gráfico de una cifra de `rangos`, con su leyenda, su tabla y sus notas; en las subidas, con la del salario y la del IPC
@@ -1331,7 +1434,7 @@ function htmlRango(f, columna) {
     { valor: s.salario.variacion, texto: s.salario.texto, nombre: "Salario mediano (" + s.ambito + ")", corto: "Salario", color: "#3a3a38" },
     { valor: s.ipc.variacion, texto: s.ipc.texto, nombre: "Precios (IPC de " + s.ipc.ambito + ")", corto: "IPC", color: "#6b6963" }] : [];
   const presentes = c.clases.filter((x, j) => c.k.indexOf(j + 1) >= 0);
-  const leyenda = leyendaTira(c.clases) || '<div class="leyenda-meses">' + presentes.map((x) => '<span><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="' +
+  const leyenda = clasesDeTira(c.clases) ? "" : '<div class="leyenda-meses">' + presentes.map((x) => '<span><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="' +
     x.color + '" stroke="rgba(0,0,0,0.4)" stroke-width="0.75"/></svg> ' + esc(x.rotulo) + "</span>").join("") + "</div>";
   const filas = c.i.map((k, j) => j).sort((a, b) => c.v[b] - c.v[a]).map((j) => {
     const k = c.i[j];
@@ -1344,7 +1447,11 @@ function htmlRango(f, columna) {
   // Las notas y la fuente, plegadas: son muchas (pedido por el usuario el 24 de octubre de 2026)
   const pie = plegado("Cómo leer el gráfico, notas y fuente", '<ul class="notas">' + notas.map((x) => "<li>" + esc(x) + "</li>").join("") +
     "<li>Fuente: " + esc(c.fuente) + ".</li></ul>");
-  return htmlGrafico(c.titulo, refs.length ? svgRangoSubida(gr, c, refs, c.titulo) : svgRango(gr, c, refs, c.titulo), tabla, [], null, leyenda, pie);
+  // Texto alternativo: la más baja, la más alta y las subidas de referencia
+  const jMin = c.v.indexOf(Math.min(...c.v)), jMax = c.v.indexOf(Math.max(...c.v));
+  const detalle = "Del área más baja, " + gr.nombres[c.i[jMin]] + " (" + c.t[jMin] + "), a la más alta, " + gr.nombres[c.i[jMax]] + " (" + c.t[jMax] + ")." +
+    refs.map((r) => " " + r.nombre + ": " + r.texto + ".").join("") + " " + (/^alquiler/.test(columna) ? ALT_ALQUILER : ALT_VENTA);
+  return htmlGrafico(c.titulo, refs.length ? svgRangoSubida(gr, c, refs, c.titulo, detalle) : svgRango(gr, c, refs, c.titulo, detalle), tabla, [], null, leyenda, pie);
 }
 // La cifra y, debajo, la que va con ella (la subida con el precio de 2024, y al revés)
 function htmlRangos(f, columna) {
@@ -1422,7 +1529,10 @@ function pintarCabeza() {
   const f = estado.ficha, tema = temaActual();
   let h = "";
   if (f.ruta.length) h += '<p class="migas">' + f.ruta.map((r) => enlaceLugar(f, r.enlace, r.titulo)).join(" › ") + "</p>";
-  h += "<h1 data-titulo=\"" + esc(f.titulo) + "\">" + (f.cabecera ? esc(f.cabecera.texto) + " <small class=\"codigo\">" + esc(f.cabecera.codigo) + "</small>" : esc(f.titulo)) + "</h1>";
+  // El nombre, con el tipo de lugar encima en pequeño (decisión del usuario, 2 de noviembre de 2026): distritos y secciones, con su código
+  const tipo = /^([^:]+):\s*(.+)$/.exec(f.titulo);
+  h += "<h1 data-titulo=\"" + esc(f.titulo) + "\">" + (f.cabecera ? esc(textoLugar(f.cabecera.texto)) + " <small class=\"codigo\">" + esc(f.cabecera.codigo) + "</small>"
+    : tipo ? '<small class="tipo-lugar">' + esc(tipo[1]) + "</small> " + esc(nombreNatural(tipo[2])) : esc(f.titulo)) + "</h1>";
   if (f.nivel === "nacional") h += '<p class="entrada">Elige un tema arriba y un lugar en el mapa, o búscalo. Cada cifra lleva al lado sus avisos, y cada gráfico, su fuente.</p>';
   // Un botón por cifra y, si la elegida tiene varias bases, el selector de la base (decisión del usuario, 18 de
   // octubre de 2026). Cada base es una variable, con su tarjeta, su gráfico y su mapa.
@@ -1536,11 +1646,12 @@ async function verFicha(nivel, codigo) {
     [f, col] = await Promise.all([cargar("fichas/" + nivel + "/" + codigo + ".json"), cargar("columnas/" + nivel + ".json")]);
   } catch (e) {
     $("cabeza").innerHTML = "";
-    zona.innerHTML = '<p class="error">No hay ficha para el código ' + esc(codigo) + " (" + esc(nivel) + ") en esta versión de prueba. " +
-      'Solo están España, las comunidades, las provincias y, por debajo, la provincia de Sevilla. <a href="#/">Volver a España</a>.</p>';
+    zona.innerHTML = '<p class="error">No hay ficha para el código ' + esc(codigo) + " (" + esc(nivel) + "). " +
+      '<a href="#/">Volver a España</a>.</p>';
     zona.removeAttribute("aria-busy");
     return;
   }
+  nombresLegibles(f);
   estado.ficha = f;
   estado.col = col;
   // Cada cifra de la ficha por su columna: texto, valor y avisos (las tarjetas y los gráficos las leen de aquí)
@@ -1555,12 +1666,12 @@ async function verFicha(nivel, codigo) {
   // Debajo de la portada se carga la ficha de España: la portada conserva su título, que es el que ve Google (indexacion.md)
   if (enLugarReal()) document.title = TITULO_INICIAL;
   else if (!document.documentElement.classList.contains("con-portada")) {
-    document.title = (nivel === "nacional" ? "" : f.titulo + " · ") + temaActual().titulo + " · Vivienda en España";
+    document.title = (nivel === "nacional" ? "" : textoLugar(f.titulo) + " · ") + temaActual().titulo + " · Vivienda en España";
   }
   contarVisita();
   const boton = $("ir-ficha");
   if (estado.desdeMapa && estrecha()) {
-    boton.textContent = "Ver la ficha: " + f.titulo;
+    boton.textContent = "Ver la ficha: " + textoLugar(f.titulo);
     boton.hidden = false;
   } else {
     boton.hidden = true;
@@ -1716,14 +1827,16 @@ const normal = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 async function buscar(q) {
   if (!indice) {
-    indice = (await cargar("buscador.json")).map(([t, e, extra]) => ({ t, e, n: normal(t + " " + (extra || "")), nombre: normal(t.replace(/^[^:]*: /, "")) }));
+    // Se encuentra por el nombre del INE y por el natural («coruña» y «a coruña»); se enseña el natural
+    indice = (await cargar("buscador.json")).map(([t, e, extra]) => ({ t: textoLugar(t), e, n: normal(t + " " + textoLugar(t) + " " + (extra || "")), nombre: normal(t.replace(/^[^:]*: /, "")), natural: normal(textoLugar(t).replace(/^[^:]*: /, "")) }));
   }
   const nq = normal(q.trim());
   if (!nq) return [];
   const palabras = nq.split(/\s+/);
   const nivelDe = (e) => NIVELES.indexOf(e.split("/")[1]);
   const r = indice.filter((x) => palabras.every((p) => x.n.includes(p)));
-  r.sort((a, b) => (b.nombre.startsWith(nq) - a.nombre.startsWith(nq)) || (nivelDe(a.e) - nivelDe(b.e)) || (a.t.length - b.t.length));
+  const empieza = (x) => x.nombre.startsWith(nq) || x.natural.startsWith(nq);
+  r.sort((a, b) => (empieza(b) - empieza(a)) || (nivelDe(a.e) - nivelDe(b.e)) || (a.t.length - b.t.length));
   return r.slice(0, 12);
 }
 
@@ -1741,7 +1854,7 @@ function iniciarBuscador() {
     if (!q.trim()) { cerrar(); return; }
     lista.innerHTML = actuales.length
       ? actuales.map((x, i) => '<li role="option" id="op' + i + '" data-e="' + x.e + '">' + esc(x.t) + "</li>").join("")
-      : '<li class="vacio">Sin resultados. En esta prueba solo están España, las comunidades, las provincias y la provincia de Sevilla.</li>';
+      : '<li class="vacio">Sin resultados. Busca por el nombre de una comunidad, una provincia o un municipio, o por el código de un distrito o una sección.</li>';
     lista.hidden = false;
     entrada.setAttribute("aria-expanded", "true");
     elegido = actuales.length ? 0 : -1;

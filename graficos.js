@@ -7,7 +7,7 @@
 const vistas = { vista: "mapa", lista: [], clave: null, elegido: null };   // elegido: id del gráfico a la vista
 // El nombre del lugar sin su nivel («Provincia: Sevilla» -> «Sevilla»; decisión del usuario, 25 de octubre de 2026): el
 // resto de la página ya dice qué es
-const nombreLugar = (f) => f.titulo.replace(/^[^:]+:\s*/, "");
+const nombreLugar = (f) => textoLugar(f.titulo).replace(/^[^:]+:\s*/, "");
 
 async function pintarGraficosLugar(f, tema) {
   const indice = await cargar("graficos.json").catch(() => ({ graficos: [] }));
@@ -204,7 +204,7 @@ function htmlGraficoGrupos(d) {
     y += 16 + HUECO_PANEL;
 
   };
-  panel(d.total.nombre, [d.total], () => "Todas las viviendas: " + d.total.texto_viviendas, true);
+  panel(textoLugar(d.total.nombre), [d.total], () => "Todas las viviendas: " + d.total.texto_viviendas, true);
   panel("Grupos de municipios (mismo eje)", d.grupos, (g) => g.nombre + " (" + g.texto_municipios + " municipios; " + g.texto_viviendas + " viviendas)", false);
   const svg = '<svg class="grupos-svg" data-id="' + esc(d.id) + '" viewBox="0 0 ' + W + " " + y + '" width="' + W + '" height="' + y +
     '" role="img" aria-label="' + esc(d.titulo) + '">' + s + "</svg>";
@@ -231,7 +231,7 @@ function partirTexto(texto, ancho) {
 
 function textoTrozo(d, b, t, deArriba) {
   const unidad = d.series.find((x) => x.id === b.serie).unidad;
-  return t.n + ": " + numero(t.v, 0) + " viviendas " + unidad + " (" + numero(t.p, 1) + "% de las viviendas " + (deArriba ? "del grupo" : t.c ? "del municipio" : "de esos municipios") + ")";
+  return textoLugar(t.n) + ": " + numero(t.v, 0) + " viviendas " + unidad + " (" + numero(t.p, 1) + "% de las viviendas " + (deArriba ? "del grupo" : t.c ? "del municipio" : "de esos municipios") + ")";
 }
 
 // --- Enlaces ------------------------------------------------------------------------------------------------------

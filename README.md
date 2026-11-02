@@ -10,7 +10,7 @@ Página: https://avila-a.github.io/vivienda-esp-beta
 - `.github/workflows/publicar.yml`: el proceso que publica la página en GitHub Pages.
 - Esta explicación y la licencia (`LICENSE`).
 
-Los datos de la página (la carpeta `datos/`: fichas, mapas y descargas) no están en el repositorio. Van en un zip adjunto a cada *Release*, y el proceso de publicación lo une a la página. En el mismo zip van `sitemap.xml` y las copias de `index.html` que dan a cada lugar su dirección (`espana/`, `comunidad/`, `provincia/`), con su título y su descripción. Se preparan y se comprueban aparte, antes de cada publicación: cada cifra de la página se compara con las tablas de las que sale.
+Los datos de la página (la carpeta `datos/`: fichas, mapas y descargas) no están en el repositorio. Van en un zip adjunto a cada *Release*, y el proceso de publicación lo une a la página. En el mismo zip van `sitemap.xml` y las copias de `index.html` que dan a cada lugar su dirección (`espana/`, `comunidad/`, `provincia/`, `municipio/`), con su título y su descripción. Se preparan y se comprueban aparte, antes de cada publicación: cada cifra de la página se compara con las tablas de las que sale.
 
 Para ver la página en tu ordenador: baja el zip de la última Release, descomprímelo en la carpeta del repositorio (se crea `datos/`) y sirve la carpeta con cualquier servidor web local. Abrir `index.html` directamente no funciona: el navegador no deja leer `datos/` desde un archivo.
 
