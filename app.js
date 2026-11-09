@@ -197,7 +197,11 @@ function direccion(nivel, codigo) {
   if (estado.columna && !(estado.columnaAuto && estado.tema === "resumen")) q.set("v", estado.columna);
   return "#/" + nivel + "/" + codigo + "?" + q.toString();
 }
+// Con la portada a la vista no se toca la dirección: si se escribiera la de la ficha que carga detrás, «Empezar» pediría
+// la misma dirección, no habría «hashchange» y la portada no se iría (entrada.js)
 function actualizarDireccion() {
+  const portada = document.getElementById("portada");
+  if (portada && !portada.hidden) return;
   if (estado.ficha) history.replaceState(null, "", direccion(estado.ficha.nivel, estado.ficha.codigo));
 }
 // Dirección real de un lugar (/provincia/cadiz-11/; copias de index.html de paginas_lugares.R, con <base> a la raíz): mientras
@@ -1645,6 +1649,12 @@ async function verFicha(nivel, codigo) {
   try {
     [f, col] = await Promise.all([cargar("fichas/" + nivel + "/" + codigo + ".json"), cargar("columnas/" + nivel + ".json")]);
   } catch (e) {
+    // En la dirección real del lugar se queda la versión sencilla del HTML, con su aviso (paginas_lugares.R)
+    if (enLugarReal() && nivel === window.LUGAR_INICIAL.nivel && codigo === window.LUGAR_INICIAL.codigo) {
+      falloAplicacion();
+      zona.removeAttribute("aria-busy");
+      return;
+    }
     $("cabeza").innerHTML = "";
     zona.innerHTML = '<p class="error">No hay ficha para el código ' + esc(codigo) + " (" + esc(nivel) + "). " +
       '<a href="#/">Volver a España</a>.</p>';
@@ -1993,4 +2003,7 @@ async function iniciar() {
   seguirRuta();
 }
 
-iniciar();
+// Si la aplicación no arranca (no llegan los datos), se ve el aviso de la versión sencilla (index.html, paginas_lugares.R)
+function falloAplicacion() { document.documentElement.classList.add("app-fallo"); }
+iniciar().catch(falloAplicacion);
+window.APP_EN_MARCHA = true;   // lo mira index.html al terminar de cargar: si app.js no ha llegado, el aviso

@@ -9,6 +9,9 @@ html.con-portada { overflow: hidden; }
   position: fixed; inset: 0; z-index: 2000; overflow-y: auto; background: var(--fondo);
 }
 .portada[hidden] { display: none; }
+/* Sin JavaScript la portada se ve siempre (con su enlace «Empezar»); con JavaScript, solo cuando entrada.js la pide */
+.con-js .portada { display: none; }
+.con-js.con-portada .portada:not([hidden]) { display: block; }
 .portada-cuerpo {
   min-height: 100%; display: flex; flex-direction: column; justify-content: center;
   max-width: 640px; margin: 0 auto; padding: 32px 16px;

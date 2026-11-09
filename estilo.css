@@ -47,6 +47,13 @@ a { color: #1d5fad; }
 .buscador li.vacio { color: var(--tinta-suave); cursor: default; }
 .enlace-fuentes { white-space: nowrap; }
 .aviso-prueba { margin: 0; padding: 6px 16px; font-size: 14px; background: var(--fondo-suave); color: var(--tinta-suave); }
+/* Versión sencilla de cada lugar (paginas_lugares.R): el aviso, solo sin JavaScript o si la aplicación no arranca */
+.aviso-sencilla { margin: 0; padding: 8px 16px; font-size: 14px; background: var(--fondo-suave); }
+.con-js .aviso-sencilla { display: none; }
+.con-js.app-fallo .aviso-sencilla { display: block; }
+.cifras-sencillas { padding-left: 20px; }
+.cifras-sencillas > li { margin-bottom: 10px; }
+.cifras-sencillas p { margin: 2px 0; }
 
 /* Mapa */
 .zona-mapa { padding: 0 16px; scroll-margin-top: calc(var(--cabecera) + var(--pestanas)); }   /* al subir a ella, no bajo la cabecera fija */

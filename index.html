@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Con JavaScript: sin el aviso de la versión sencilla ni la portada hasta que entrada.js la pida -->
+<script>document.documentElement.classList.add("con-js");</script>
 <title>Vivienda en España: alquiler, vacías y turísticas de cada lugar</title>
 <meta name="description" content="Datos de vivienda de cada lugar de España, de la comunidad autónoma a la sección censal: alquiler, compra, viviendas vacías, turísticas, segunda residencia y construcción.">
 <link rel="canonical" href="https://avila-a.github.io/vivienda-esp-beta/">
@@ -36,10 +38,10 @@
 <meta property="og:image" content="https://avila-a.github.io/vivienda-esp-beta/lib/vista_previa.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="La vivienda de España, en datos. De tu región a tu barrio. Mapa de España por provincias.">
+<meta property="og:image:alt" content="La vivienda de España, en datos. De tu región a tu barrio. Mapa de España en puntos naranjas, más oscuros cuanto más alto es el alquiler mediano por metro cuadrado de la provincia en 2024.">
 <meta property="og:locale" content="es_ES">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2322211f'/%3E%3Cpath d='M16 6 4.500 16.500H8V26h6v-7h4v7h6v-9.500h3.500z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2322211f'/%3E%3Cpath d='M16 6 4.500 16.500H8V26h6v-7h4v7h6v-9.500h3.500z' fill='%23eb6834'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="lib/leaflet.css">
 <link rel="stylesheet" href="estilo.css">
 <link rel="stylesheet" href="entrada.css">
@@ -52,7 +54,7 @@
 <script src="graficos.js" defer></script>
 </head>
 <body>
-<section id="portada" class="portada" aria-label="Presentación" hidden>
+<section id="portada" class="portada" aria-label="Presentación">
   <div class="portada-cuerpo">
     <p class="marca-intro">Vivienda en España <span class="beta">(versión beta)</span></p>
     <h1>La vivienda de España, en datos</h1>
@@ -93,6 +95,8 @@
   </nav>
 </header>
 <nav id="pestanas" class="pestanas" role="tablist" aria-label="Temas"></nav>
+<!-- Se ve sin JavaScript o si la aplicación no arranca (clase app-fallo); paginas_lugares.R escribe la versión sencilla -->
+<p id="aviso-sencilla" class="aviso-sencilla">Esta es una versión sencilla de la página, sin mapa ni gráficos: la página completa necesita JavaScript. Las cifras son las mismas, con sus avisos.</p>
 
 <main class="cuerpo">
   <section id="cabeza" class="zona-cabeza" aria-live="polite">
@@ -121,6 +125,7 @@
   </div>
   <div id="ventana-cuerpo" class="ventana-cuerpo"></div>
 </dialog>
-<noscript><p class="aviso-prueba">Esta página necesita JavaScript para enseñar el mapa y las fichas. Las tablas se pueden descargar en la carpeta datos/descargas/.</p></noscript>
+<!-- Si app.js no llega a cargarse, el aviso de la versión sencilla -->
+<script>addEventListener("load", function () { if (!window.APP_EN_MARCHA) document.documentElement.classList.add("app-fallo"); });</script>
 </body>
 </html>

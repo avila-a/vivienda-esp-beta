@@ -14,7 +14,12 @@
     if (ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
     ev.preventDefault();
     ev.stopPropagation();   // app.js, si ya está cargado, haría lo mismo
-    location.hash = ev.currentTarget.dataset.ruta;
+    const destino = ev.currentTarget.dataset.ruta;
+    // Si la dirección ya es la de destino, no habrá «hashchange»: se quita la portada aquí
+    if (location.hash === destino) {
+      portada.hidden = true;
+      document.documentElement.classList.remove("con-portada");
+    } else location.hash = destino;
   });
   ver();
 })();
